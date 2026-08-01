@@ -65,7 +65,7 @@ For each plotted parameter value, the mean is calculated from the 500 independen
 
 $$\bar{x}\frac{1}{n}\sum_{i=1}^{n}x_i$$
 
-where $n=500$.
+where $n=1000$.
 
 The reported standard deviation is the population standard deviation:
 

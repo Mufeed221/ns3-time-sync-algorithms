@@ -175,7 +175,7 @@ DC-Sync repeatedly updates the estimated velocity, equivalent Doppler scaling fa
 
 ## 6. Parameter Sweeps
 
-Unless otherwise stated, 500 independent Monte Carlo runs are performed for every protocol, mobility model, and parameter value.
+Unless otherwise stated, 1000 independent Monte Carlo runs are performed for every protocol, mobility model, and parameter value.
 
 | Experiment                          | Evaluated values                                      | Runs per point |
 | ----------------------------------- | ----------------------------------------------------- | -------------: |
@@ -202,7 +202,7 @@ One simulation run represents one independent realization of a specific combinat
 * random run number,
 * and simulation configuration.
 
-Five hundred independent runs are executed for every plotted data point rather than 500 runs being shared across the complete study.
+One Thousand independent runs are executed for every plotted data point rather than 1000 runs being shared across the complete study.
 
-For each data point, the processed results report the arithmetic mean and population standard deviation over the 500 runs.
+For each data point, the processed results report the arithmetic mean and population standard deviation over the 1000 runs.
 
