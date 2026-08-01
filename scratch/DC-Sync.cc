@@ -16,7 +16,7 @@ NS_LOG_COMPONENT_DEFINE ("DC-Sync");
 
 uint32_t seed;
 uint32_t run;
-char plotNum;
+uint32_t plotNum;
 
 double initVelocity;
 double maxVelocity;
@@ -642,9 +642,9 @@ int
 main (int argc, char *argv[])
 {
 	seed = 1;
-	run = 0;
+	run = 1;
 
-	plotNum = '0';
+	plotNum = 0;
 	track1 = true;
 	track2 = false;
 
@@ -667,11 +667,7 @@ main (int argc, char *argv[])
 	uint32_t pktSize = 60;  //60 byte
 
 	double radius = 100.0;
-	double omega = velocity / radius; // Result: 0.04 rad/s
-
-	int totalRuns = 1;
-	int totalVariations = 1;
-	int currentVariationIndex = 2;
+	double omega = velocity / radius; // Result: 0.02 rad/s
 
 	CommandLine cmd;
 	cmd.AddValue("seed", "Random seed", seed);
@@ -692,9 +688,6 @@ main (int argc, char *argv[])
 	cmd.AddValue ("messagePairsCount", "Number of two-way pairs", messagePairsCount);
 	cmd.AddValue ("messageInterval", "Time to between messages (s)", DCMessageInterval);
 	cmd.AddValue ("pktSize", "Packet size in bytes", pktSize);
-	cmd.AddValue ("totalRuns", "Number of runs", totalRuns);
-	cmd.AddValue ("totalVariations", "Number of variations", totalVariations);
-	cmd.AddValue ("currentVariationIndex", "current variation index", currentVariationIndex);
 
 	cmd.Parse (argc, argv);
 
@@ -738,8 +731,8 @@ main (int argc, char *argv[])
 		Ptr<WaypointMobilityModel> DCwaypoints = CreateObject<WaypointMobilityModel>();
 		double initialPhase = angleIndex * (M_PI / 4.0);
 
-		for (double t = 0; t < runtime; t += 0.1) {
-
+		for (double t = 0; t < runtime; t += 0.5)
+		{
 			double phase = (omega * t) + initialPhase;
 
 		    double DCx = initDistance + radius * cos(phase);
@@ -796,28 +789,12 @@ main (int argc, char *argv[])
 	DeviceEnergyModelContainer DCDeviceEnergyModels = DCAcousticModemEnergyHelper.Install (DCDevices, DCEnergySources);
 
 	auto DCPrintEnergyReport = [&]() {
-		std::cout << "\n=== DC DETAILED ENERGY CONSUMPTION REPORT ===" << std::endl;
-
-		for (uint32_t i = 0; i < DCNodes.GetN(); i++)
-		{
-			Ptr<EnergySource> energySource = DCEnergySources.Get(i);
-			Ptr<DeviceEnergyModel> energyModel = DCDeviceEnergyModels.Get(i);
-
-			std::cout << "Node " << i << " (" << (i == 0 ? "DCBeacon" : "DCOrdinary") << "):" << std::endl;
-			std::cout << "  Initial energy: " << energySource->GetInitialEnergy() << " J" << std::endl;
-			std::cout << "  Remaining energy: " << energySource->GetRemainingEnergy() << " J" << std::endl;
-			std::cout << "  Total consumed: " << energyModel->GetTotalEnergyConsumption() << " J" << std::endl;
-		}
-
-		// Protocol efficiency analysis
-		std::cout << "\n--- Protocol Efficiency ---" << std::endl;
-		std::cout << "Total energy for one synchronization: "
-				<< (DCDeviceEnergyModels.Get(0)->GetTotalEnergyConsumption() +
-						DCDeviceEnergyModels.Get(1)->GetTotalEnergyConsumption()) << " J" << std::endl;
-		std::cout << "Beacon/Ordinary energy ratio: "
-				<< (DCDeviceEnergyModels.Get(0)->GetTotalEnergyConsumption() /
-						DCDeviceEnergyModels.Get(1)->GetTotalEnergyConsumption()) << std::endl;
-		std::cout << "==========================================" << std::endl;
+		std::ofstream plot("results/raw/energy.csv", std::ios::app);
+		plot << "DC-Sync" << ","
+				<< DCDeviceEnergyModels.Get(0)->GetTotalEnergyConsumption() << ","
+				<< DCDeviceEnergyModels.Get(1)->GetTotalEnergyConsumption() << ","
+				<< DCDeviceEnergyModels.Get(0)->GetTotalEnergyConsumption() +
+				   DCDeviceEnergyModels.Get(1)->GetTotalEnergyConsumption() << "\n";
 	};
 
 	// Get MAC addresses
@@ -850,15 +827,14 @@ main (int argc, char *argv[])
 
 	auto PrintResuDCs = [&]() {
 		switch (plotNum) {
-			case'0':{
-				DCPrintEnergyReport();
+			case 0:{
 				std::cout << "=== DC Results ===" << std::endl;
 				std::cout << "DC offset error = " <<DCOffsetError<<" us"<< std::endl;
 				std::cout << "DC skew error = " <<DCSkewError<<" ppm"<< std::endl;
 				break;
 			}
-			case '1':{
-				std::ofstream plot("csv/plot1.csv", std::ios::app);
+			case 1:{
+				std::ofstream plot("results/raw/distance.csv", std::ios::app);
 				if (track1) {
 				    plot << DCOffsetError << ",";
 				}
@@ -867,23 +843,23 @@ main (int argc, char *argv[])
 				}
 			break;
 			}
-			case '2':{
-				std::ofstream plot("csv/plot2.csv", std::ios::app);
+			case 2:{
+				std::ofstream plot("results/raw/angle.csv", std::ios::app);
 				plot << DCOffsetError << "\n";
 			break;
 			}
-			case '3':{
-				std::ofstream plot("csv/plot3.csv", std::ios::app);
+			case 3:{
+				std::ofstream plot("results/raw/velocity.csv", std::ios::app);
 				plot << DCOffsetError << "\n";
 			break;
 			}
-			case '4':{
-				std::ofstream plot("csv/plot4.csv", std::ios::app);
+			case 4:{
+				std::ofstream plot("results/raw/acceleration.csv", std::ios::app);
 				plot << DCOffsetError << "\n";
 			break;
 			}
-			case '5':{
-				std::ofstream plot("csv/plot5.csv", std::ios::app);
+			case 5:{
+				std::ofstream plot("results/raw/velocity_noise.csv", std::ios::app);
 				if (track1) {
 				    plot << DCOffsetError << ",";
 				}
@@ -892,8 +868,8 @@ main (int argc, char *argv[])
 				}
 				break;
 			}
-			case '6':{
-				std::ofstream plot("csv/plot6.csv", std::ios::app);
+			case 6:{
+				std::ofstream plot("results/raw/jitter_noise.csv", std::ios::app);
 				if (track1) {
 				    plot << DCOffsetError << ",";
 				}
@@ -902,8 +878,8 @@ main (int argc, char *argv[])
 				}
 				break;
 			}
-			case '7':{
-				std::ofstream plot("csv/plot7.csv", std::ios::app);
+			case 7:{
+				std::ofstream plot("results/raw/initial_offset.csv", std::ios::app);
 				if (track1) {
 				    plot << DCOffsetError << ",";
 				}
@@ -912,8 +888,8 @@ main (int argc, char *argv[])
 				}
 				break;
 			}
-			case '8':{
-				std::ofstream plot("csv/plot8.csv", std::ios::app);
+			case 8:{
+				std::ofstream plot("results/raw/initial_skew.csv", std::ios::app);
 				if (track1) {
 				    plot << DCOffsetError << ",";
 				}
@@ -922,8 +898,8 @@ main (int argc, char *argv[])
 				}
 				break;
 			}
-			case '9':{
-				std::ofstream plot("csv/plot9c.csv", std::ios::app);
+			case 9:{
+				std::ofstream plot("results/raw/DC_message_count.csv", std::ios::app);
 				if(track1){
 					if(run == 1 && messagePairsCount == 10){
 						plot << "Track 1,,,Track 2\n";
@@ -935,6 +911,10 @@ main (int argc, char *argv[])
 				}
 				break;
 			}
+			case 10:{
+				DCPrintEnergyReport();
+				break;
+			}
 			default:{
 				break;
 			}
@@ -942,11 +922,6 @@ main (int argc, char *argv[])
 	};
 
 	Simulator::Schedule (Seconds (runtime), PrintResuDCs);
-
-	double currentRun = ((currentVariationIndex-1) * totalRuns) + run;
-	double allRuns = totalVariations * totalRuns;
-	double finishedPrecnetage = (currentRun / allRuns) * 100;
-	std::cout << "Starting simulation plot num ("<<plotNum<<"), Finished ("<<currentRun <<"/"<< allRuns <<") "<< finishedPrecnetage <<" %"<<std::endl;
 
 	Simulator::Stop (Seconds(runtime));
 	Simulator::Run ();

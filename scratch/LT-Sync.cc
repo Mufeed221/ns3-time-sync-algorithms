@@ -14,7 +14,7 @@ NS_LOG_COMPONENT_DEFINE ("LT-Sync");
 
 uint32_t seed;
 uint32_t run;
-char plotNum;
+uint32_t plotNum;
 
 double initVelocity;
 double maxVelocity;
@@ -504,9 +504,9 @@ int
 main (int argc, char *argv[])
 {
 	seed = 1;
-	run = 0;
+	run = 1;
 
-	plotNum = '0';
+	plotNum = 0;
 	track1 = true;
 	track2 = false;
 
@@ -528,7 +528,7 @@ main (int argc, char *argv[])
 	uint32_t pktSize = 60;  //60 byte
 
 	double radius = 100.0;
-	double omega = velocity / radius; // Result: 0.04 rad/s
+	double omega = velocity / radius; // Result: 0.02 rad/s
 
 	CommandLine cmd;
 	cmd.AddValue("seed", "Random seed", seed);
@@ -591,8 +591,8 @@ main (int argc, char *argv[])
 		Ptr<WaypointMobilityModel> LTwaypoints = CreateObject<WaypointMobilityModel>();
 		double initialPhase = angleIndex * (M_PI / 4.0);
 
-		for (double t = 0; t < runtime; t += 0.1) {
-
+		for (double t = 0; t < runtime; t += 0.5)
+		{
 			double phase = (omega * t) + initialPhase;
 
 		    double LTx = initDistance + radius * cos(phase);
@@ -649,28 +649,12 @@ main (int argc, char *argv[])
 	DeviceEnergyModelContainer LTDeviceEnergyModels = LTAcousticModemEnergyHelper.Install (LTDevices, LTEnergySources);
 
 	auto LTPrintEnergyReport = [&]() {
-		std::cout << "\n=== LT DETAILED ENERGY CONSUMPTION REPORT ===" << std::endl;
-
-		for (uint32_t i = 0; i < LTNodes.GetN(); i++)
-		{
-			Ptr<EnergySource> energySource = LTEnergySources.Get(i);
-			Ptr<DeviceEnergyModel> energyModel = LTDeviceEnergyModels.Get(i);
-
-			std::cout << "Node " << i << " (" << (i == 0 ? "LTBeacon" : "LTOrdinary") << "):" << std::endl;
-			std::cout << "  Initial energy: " << energySource->GetInitialEnergy() << " J" << std::endl;
-			std::cout << "  Remaining energy: " << energySource->GetRemainingEnergy() << " J" << std::endl;
-			std::cout << "  Total consumed: " << energyModel->GetTotalEnergyConsumption() << " J" << std::endl;
-		}
-
-		// Protocol efficiency analysis
-		std::cout << "\n--- Protocol Efficiency ---" << std::endl;
-		std::cout << "Total energy for one synchronization: "
-				<< (LTDeviceEnergyModels.Get(0)->GetTotalEnergyConsumption() +
-						LTDeviceEnergyModels.Get(1)->GetTotalEnergyConsumption()) << " J" << std::endl;
-		std::cout << "Beacon/Ordinary energy ratio: "
-				<< (LTDeviceEnergyModels.Get(0)->GetTotalEnergyConsumption() /
-	                    LTDeviceEnergyModels.Get(1)->GetTotalEnergyConsumption()) << std::endl;
-		std::cout << "==========================================" << std::endl;
+		std::ofstream plot("results/raw/energy.csv", std::ios::app);
+		plot << "LT-Sync" << ","
+				<< LTDeviceEnergyModels.Get(0)->GetTotalEnergyConsumption() << ","
+				<< LTDeviceEnergyModels.Get(1)->GetTotalEnergyConsumption() << ","
+				<< LTDeviceEnergyModels.Get(0)->GetTotalEnergyConsumption() +
+				   LTDeviceEnergyModels.Get(1)->GetTotalEnergyConsumption() << "\n";
 	};
 
 	// Get MAC addresses
@@ -703,15 +687,14 @@ main (int argc, char *argv[])
 
 	auto PrintResults = [&]() {
 		switch (plotNum) {
-			case'0':{
-				LTPrintEnergyReport();
+			case 0:{
 				std::cout << "=== LT Results ===" << std::endl;
 				std::cout << "LT offset error = " <<LTOffsetError<<" us"<< std::endl;
 				std::cout << "LT skew error = " <<LTSkewError<<" ppm"<< std::endl;
 				break;
 			}
-			case '1':{
-				std::ofstream plot("csv/plot1.csv", std::ios::app);
+			case 1:{
+				std::ofstream plot("results/raw/distance.csv", std::ios::app);
 				if (track1) {
 				    plot << LTOffsetError << ",";
 				}
@@ -720,23 +703,23 @@ main (int argc, char *argv[])
 				}
 			break;
 			}
-			case '2':{
-				std::ofstream plot("csv/plot2.csv", std::ios::app);
+			case 2:{
+				std::ofstream plot("results/raw/angle.csv", std::ios::app);
 				plot << LTOffsetError << ",";
 			break;
 			}
-			case '3':{
-				std::ofstream plot("csv/plot3.csv", std::ios::app);
+			case 3:{
+				std::ofstream plot("results/raw/velocity.csv", std::ios::app);
 				plot << LTOffsetError << ",";
 			break;
 			}
-			case '4':{
-				std::ofstream plot("csv/plot4.csv", std::ios::app);
+			case 4:{
+				std::ofstream plot("results/raw/acceleration.csv", std::ios::app);
 				plot << LTOffsetError << ",";
 			break;
 			}
-			case '5':{
-				std::ofstream plot("csv/plot5.csv", std::ios::app);
+			case 5:{
+				std::ofstream plot("results/raw/velocity_noise.csv", std::ios::app);
 				if (track1) {
 				    plot << LTOffsetError << ",";
 				}
@@ -745,8 +728,8 @@ main (int argc, char *argv[])
 				}
 				break;
 			}
-			case '6':{
-				std::ofstream plot("csv/plot6.csv", std::ios::app);
+			case 6:{
+				std::ofstream plot("results/raw/jitter_noise.csv", std::ios::app);
 				if (track1) {
 				    plot << LTOffsetError << ",";
 				}
@@ -755,8 +738,8 @@ main (int argc, char *argv[])
 				}
 				break;
 			}
-			case '7':{
-				std::ofstream plot("csv/plot7.csv", std::ios::app);
+			case 7:{
+				std::ofstream plot("results/raw/initial_offset.csv", std::ios::app);
 				if (track1) {
 				    plot << LTOffsetError << ",";
 				}
@@ -765,8 +748,8 @@ main (int argc, char *argv[])
 				}
 				break;
 			}
-			case '8':{
-				std::ofstream plot("csv/plot8.csv", std::ios::app);
+			case 8:{
+				std::ofstream plot("results/raw/initial_skew.csv", std::ios::app);
 				if (track1) {
 				    plot << LTOffsetError << ",";
 				}
@@ -775,8 +758,8 @@ main (int argc, char *argv[])
 				}
 				break;
 			}
-			case '9':{
-				std::ofstream plot("csv/plot9b.csv", std::ios::app);
+			case 9:{
+				std::ofstream plot("results/raw/LT_skew_estimate.csv", std::ios::app);
 				if(track1){
 					if(run == 1){
 						plot << "Track 1,,,Track 2\n";
@@ -786,6 +769,10 @@ main (int argc, char *argv[])
 				}else if (track2){
 					plot << "," << LTSkewError << "\n";
 				}
+				break;
+			}
+			case 10:{
+				LTPrintEnergyReport();
 				break;
 			}
 			default:{

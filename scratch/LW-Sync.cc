@@ -14,7 +14,7 @@ NS_LOG_COMPONENT_DEFINE ("LW-Sync");
 
 uint32_t seed;
 uint32_t run;
-char plotNum;
+uint32_t plotNum;
 
 double initVelocity;
 double maxVelocity;
@@ -25,6 +25,7 @@ double LWSkewError = 0;
 
 bool track1 = false;
 bool track2 = true;
+bool trackUWGS = false;
 
 double dataRate;
 
@@ -300,7 +301,7 @@ double LWGetVelocity(){
 	if(track1){
 		Ptr<ConstantAccelerationMobilityModel> mobility = LWOrdinaryApp->GetNode()-> GetObject<ConstantAccelerationMobilityModel> ();
 		radialVelocity = mobility->GetVelocity().x;
-	}else if(track2){
+	}else if(track2 || trackUWGS){
 		Ptr<MobilityModel> mobNode = LWOrdinaryApp->GetNode()->GetObject<MobilityModel>();
 		Ptr<MobilityModel> mobGw = LWBeaconApp->GetNode()->GetObject<MobilityModel>();
 
@@ -615,51 +616,55 @@ int
 main (int argc, char *argv[])
 {
 	seed = 1;
-	run = 0;
+	run = 1;
 
-	plotNum = '0';
+	plotNum = 0;
 	track1 = true;
 	track2 = false;
+	trackUWGS = false;
 
 	initVelocity = 2;
 	acceleration = 0.03;
 
 	dataRate = 20000;
-
+	double carrierFreq = 20000.0;
 	double soundSpeed = 1500.0;
+
 	double velocity = 2;
 	double initDistance = 500.0;
 	int angleIndex = 0; //[0,7] [0 = 0, 1 = 45, 2 = 90, 3 = 135, 4 = 180, 5 = 225, 6 = 270, 7 = 315)
-	double carrierFreq = 20000.0;
 	double beaconCount = 10;
 	double LWBeaconInterval = 5; //5 seconds
 	double clockSkew = 200;   //200 ppm
 	double clockOffset = 0.02; //20 ms
 	double timeError = 20e-6; //20us
 	double velocityError = 0.2; //0.2 m/s
+	double trajPosNoiseStd = 0.0;
 	uint32_t pktSize = 60;  //60 byte
 
 	double radius = 100.0;
-	double omega = velocity / radius; // Result: 0.04 rad/s
+	double omega = velocity / radius; // Result: 0.02 rad/s
 
 	CommandLine cmd;
-	cmd.AddValue("seed", "Random seed", seed);
-	cmd.AddValue("run", "Run number", run);
-	cmd.AddValue("plotNum", "Plot number", plotNum);
-	cmd.AddValue("track1", "Track type", track1);
-	cmd.AddValue("track2", "Track type", track2);
+	cmd.AddValue ("seed", "Random seed", seed);
+	cmd.AddValue ("run", "Run number", run);
+	cmd.AddValue ("plotNum", "Plot number", plotNum);
+	cmd.AddValue ("track1", "Track type", track1);
+	cmd.AddValue ("track2", "Track type", track2);
+	cmd.AddValue ("trackUWGS", "Track type", trackUWGS);
+	cmd.AddValue ("carrierFreq", "Carrier frequency (Hz)", carrierFreq);
 	cmd.AddValue ("soundSpeed", "Speed of sound in water (m/s)", soundSpeed);
+	cmd.AddValue ("initDistance", "Initial distance between nodes (m)", initDistance);
+	cmd.AddValue ("angleIndex", "Initial angle of track2 (m)", angleIndex);
+	cmd.AddValue ("beaconCount", "Number of beacons", beaconCount);
+	cmd.AddValue ("beaconInterval", "Time to between beacons (s)", LWBeaconInterval);
 	cmd.AddValue ("clockSkew", "clock skew (ppm)", clockSkew);
 	cmd.AddValue ("clockOffset", "clock offset (s)", clockOffset);
 	cmd.AddValue ("initVelocity", "Ordinary velocity (m/s)", initVelocity);
 	cmd.AddValue ("acceleration", "Ordinary acceleration (m/s^2)", acceleration);
 	cmd.AddValue ("timeError", "timestamp noise (us)", timeError);
 	cmd.AddValue ("velocityError", "velocity noise (m/s)", velocityError);
-	cmd.AddValue ("initDistance", "Initial distance between nodes (m)", initDistance);
-	cmd.AddValue ("angleIndex", "Initial angle of track2 (m)", angleIndex);
-	cmd.AddValue ("carrierFreq", "Carrier frequency (Hz)", carrierFreq);
-	cmd.AddValue ("beaconCount", "Number of beacons", beaconCount);
-	cmd.AddValue ("beaconInterval", "Time to between beacons (s)", LWBeaconInterval);
+	cmd.AddValue ("trajPosNoiseStd", "Node trajectory-position noise std. dev. (m)", trajPosNoiseStd);
 	cmd.AddValue ("pktSize", "Packet size in bytes", pktSize);
 
 	cmd.Parse (argc, argv);
@@ -704,7 +709,8 @@ main (int argc, char *argv[])
 		Ptr<WaypointMobilityModel> LWwaypoints = CreateObject<WaypointMobilityModel>();
 		double initialPhase = angleIndex * (M_PI / 4.0);
 
-		for (double t = 0; t < runtime; t += 0.1) {
+		for (double t = 0; t < runtime; t += 0.5)
+		{
 
 			double phase = (omega * t) + initialPhase;
 
@@ -715,6 +721,29 @@ main (int argc, char *argv[])
 		}
 
 		LWNodes.Get(1)->AggregateObject(LWwaypoints);
+	}else if(trackUWGS){
+		Ptr<WaypointMobilityModel> nodeWaypoints = CreateObject<WaypointMobilityModel> ();
+		omega = 0.05;                   // bending angular frequency [rad/s]
+		double Ax = 3.0;                // horizontal bending amplitude [m]
+
+		for (double t = 0; t <= runtime; t += 0.5)
+		{
+			Ptr<NormalRandomVariable> xposNoiseVar = CreateObject<NormalRandomVariable> ();
+			xposNoiseVar->SetAttribute ("Mean", DoubleValue (0.0));
+			xposNoiseVar->SetAttribute ("Variance", DoubleValue (trajPosNoiseStd * trajPosNoiseStd));
+			double nx = (trajPosNoiseStd > 0.0) ? xposNoiseVar->GetValue () : 0.0;
+
+			Ptr<NormalRandomVariable> yposNoiseVar = CreateObject<NormalRandomVariable> ();
+			yposNoiseVar->SetAttribute ("Mean", DoubleValue (0.0));
+			yposNoiseVar->SetAttribute ("Variance", DoubleValue (trajPosNoiseStd * trajPosNoiseStd));
+			double ny = (trajPosNoiseStd > 0.0) ? yposNoiseVar->GetValue () : 0.0;
+
+			double xt = 0 + Ax * std::sin (omega * t) + nx;
+			double yt = -initDistance - initVelocity * t + ny;
+			nodeWaypoints->AddWaypoint (Waypoint (Seconds (t), Vector (xt, yt, -100.0)));
+		}
+
+		LWNodes.Get (1)->AggregateObject (nodeWaypoints);
 	}
 
 	// Create UAN channel with realistic propagation and noise models
@@ -762,28 +791,13 @@ main (int argc, char *argv[])
 	DeviceEnergyModelContainer LWDeviceEnergyModels = LWAcousticModemEnergyHelper.Install (LWDevices, LWEnergySources);
 
 	auto LWPrintEnergyReport = [&]() {
-		std::cout << "\n=== LW DETAILED ENERGY CONSUMPTION REPORT ===" << std::endl;
-
-		for (uint32_t i = 0; i < LWNodes.GetN(); i++)
-		{
-			Ptr<EnergySource> energySource = LWEnergySources.Get(i);
-			Ptr<DeviceEnergyModel> energyModel = LWDeviceEnergyModels.Get(i);
-
-			std::cout << "Node " << i << " (" << (i == 0 ? "LWBeacon" : "LWOrdinary") << "):" << std::endl;
-			std::cout << "  Initial energy: " << energySource->GetInitialEnergy() << " J" << std::endl;
-			std::cout << "  Remaining energy: " << energySource->GetRemainingEnergy() << " J" << std::endl;
-			std::cout << "  Total consumed: " << energyModel->GetTotalEnergyConsumption() << " J" << std::endl;
-		}
-
-		// Protocol efficiency analysis
-		std::cout << "\n--- Protocol Efficiency ---" << std::endl;
-		std::cout << "Total energy for one synchronization: "
-				<< (LWDeviceEnergyModels.Get(0)->GetTotalEnergyConsumption() +
-						LWDeviceEnergyModels.Get(1)->GetTotalEnergyConsumption()) << " J" << std::endl;
-		std::cout << "Beacon/Ordinary energy ratio: "
-				<< (LWDeviceEnergyModels.Get(0)->GetTotalEnergyConsumption() /
-						LWDeviceEnergyModels.Get(1)->GetTotalEnergyConsumption()) << std::endl;
-		std::cout << "==========================================" << std::endl;
+		std::ofstream plot("results/raw/energy.csv", std::ios::app);
+		plot << "Protocol,Beacon Node(J),Ordinary Node(J),Total(J)\n";
+		plot << "LW-Sync" << ","
+				<< LWDeviceEnergyModels.Get(0)->GetTotalEnergyConsumption() << ","
+				<< LWDeviceEnergyModels.Get(1)->GetTotalEnergyConsumption() << ","
+				<< LWDeviceEnergyModels.Get(0)->GetTotalEnergyConsumption() +
+				   LWDeviceEnergyModels.Get(1)->GetTotalEnergyConsumption() << "\n";
 	};
 
 	// Get MAC addresses
@@ -851,119 +865,165 @@ main (int argc, char *argv[])
 			}
 		}
 
-		switch (plotNum) {
-			case'0':{
-				LWPrintEnergyReport();
-				std::cout << "=== LW Results ===" << std::endl;
-				std::cout << "LW offset error = " <<LWOffsetError<<" us"<< std::endl;
-				std::cout << "LW skew error = " <<LWSkewError<<" ppm"<< std::endl;
-				break;
-			}
-			case '1':{
-				std::ofstream plot("csv/plot1.csv", std::ios::app);
-				if (track1) {
-				    if (run == 1 && initDistance == 500) {
-				        plot << "Track 1,,,,,Track 2\n";
-				        plot << "Init. Distance (m),LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us),,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
-				    }
-				    plot << initDistance << "," << LWOffsetError << ",";
+		if(!trackUWGS){
+			switch (plotNum) {
+				case 0:{
+					std::cout << "=== LW Results ===" << std::endl;
+					std::cout << "LW offset error = " <<LWOffsetError<<" us"<< std::endl;
+					std::cout << "LW skew error = " <<LWSkewError<<" ppm"<< std::endl;
+					break;
 				}
-				else if (track2) {
-				    plot << "," << LWOffsetError << ",";
-				}
-			break;
-			}
-			case '2':{
-				std::ofstream plot("csv/plot2.csv", std::ios::app);
-				if (run == 1 && angle == 0) {
-					plot << "Init. Node Angle,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
-				}
-				plot << angle << "," << LWOffsetError << ",";
-			break;
-			}
-			case '3':{
-				std::ofstream plot("csv/plot3.csv", std::ios::app);
-				if (run == 1 && initVelocity == 0) {
-					plot << "Init. Radial Velocity (m/s),LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
-				}
-				plot << initVelocity << "," << LWOffsetError << ",";
-			break;
-			}
-			case '4':{
-				std::ofstream plot("csv/plot4.csv", std::ios::app);
-				if (run == 1 && acceleration == 0.01) {
-					plot << "Acceleration,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
-				}
-				plot << acceleration << "," << LWOffsetError << ",";
-			break;
-			}
-			case '5':{
-				std::ofstream plot("csv/plot5.csv", std::ios::app);
-				if(track1){
-					if(run == 1 && velocityError == 0.0){
-						plot << "Track 1,,,,,Track 2\n";
-						plot << "STD. Dev. Velocity Noise (m/s),LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us),,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
+				case 1:{
+					std::ofstream plot("results/raw/distance.csv", std::ios::app);
+					if (track1) {
+						if (run == 1 && initDistance == 500) {
+							plot << "Track 1,,,,,Track 2\n";
+							plot << "Init. Distance (m),LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us),,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
+						}
+						plot << initDistance << "," << LWOffsetError << ",";
 					}
-				    plot << velocityError << "," << LWOffsetError << ",";
-				}else if (track2){
-					plot << "," << LWOffsetError << ",";
-				}
-				break;
-			}
-			case '6':{
-				std::ofstream plot("csv/plot6.csv", std::ios::app);
-				if(track1){
-					if(run == 1 && timeError == 10e-6){
-						plot << "Track 1,,,,,Track 2\n";
-						plot << "STD. Dev. Jitter Noise (us),LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us),,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
+					else if (track2) {
+						plot << "," << LWOffsetError << ",";
 					}
-					plot << timeError * 1e6 << "," << LWOffsetError << ",";
-				}else if (track2){
-					plot << "," << LWOffsetError << ",";
-				}
 				break;
-			}
-			case '7':{
-				std::ofstream plot("csv/plot7.csv", std::ios::app);
-				if(track1){
-					if(run == 1 && clockOffset == 0.02){
-						plot << "Track 1,,,,,Track 2\n";
-						plot << "Init. Offset (s),LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us),,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
+				}
+				case 2:{
+					std::ofstream plot("results/raw/angle.csv", std::ios::app);
+					if (run == 1 && angle == 0) {
+						plot << "Init. Node Angle,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
 					}
-					plot << clockOffset << "," << LWOffsetError << ",";
-				}else if (track2){
-					plot << "," << LWOffsetError << ",";
-				}
+					plot << angle << "," << LWOffsetError << ",";
 				break;
-			}
-			case '8':{
-				std::ofstream plot("csv/plot8.csv", std::ios::app);
-				if(track1){
-					if(run == 1 && clockSkew == 100){
-						plot << "Track 1,,,,,Track 2\n";
-						plot << "Init. Skew (ppm),LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us),,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
+				}
+				case 3:{
+					std::ofstream plot("results/raw/velocity.csv", std::ios::app);
+					if (run == 1 && initVelocity == 0) {
+						plot << "Init. Radial Velocity (m/s),LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
 					}
-					plot << clockSkew << "," << LWOffsetError << ",";
-				}else if (track2){
-					plot << "," << LWOffsetError << ",";
-				}
+					plot << initVelocity << "," << LWOffsetError << ",";
 				break;
-			}
-			case '9':{
-				std::ofstream plot("csv/plot9a.csv", std::ios::app);
-				if(track1){
-					if(run == 1 && beaconCount == 10){
-						plot << "Track 1,,,Track 2\n";
-						plot << "One-way Beacons,LW-Skew Error (ppm),,LW-Skew Error (ppm)\n";
+				}
+				case 4:{
+					std::ofstream plot("results/raw/acceleration.csv", std::ios::app);
+					if (run == 1 && acceleration == 0.01) {
+						plot << "Acceleration,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
 					}
-					plot << beaconCount << "," << LWSkewError << ",";
-				}else if (track2){
-					plot << "," << LWSkewError << "\n";
+					plot << acceleration << "," << LWOffsetError << ",";
+				break;
 				}
-				break;
+				case 5:{
+					std::ofstream plot("results/raw/velocity_noise.csv", std::ios::app);
+					if(track1){
+						if(run == 1 && velocityError == 0.0){
+							plot << "Track 1,,,,,Track 2\n";
+							plot << "STD. Dev. Velocity Noise (m/s),LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us),,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
+						}
+						plot << velocityError << "," << LWOffsetError << ",";
+					}else if (track2){
+						plot << "," << LWOffsetError << ",";
+					}
+					break;
+				}
+				case 6:{
+					std::ofstream plot("results/raw/jitter_noise.csv", std::ios::app);
+					if(track1){
+						if(run == 1 && timeError == 10e-6){
+							plot << "Track 1,,,,,Track 2\n";
+							plot << "STD. Dev. Jitter Noise (us),LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us),,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
+						}
+						plot << timeError * 1e6 << "," << LWOffsetError << ",";
+					}else if (track2){
+						plot << "," << LWOffsetError << ",";
+					}
+					break;
+				}
+				case 7:{
+					std::ofstream plot("results/raw/initial_offset.csv", std::ios::app);
+					if(track1){
+						if(run == 1 && clockOffset == 0.02){
+							plot << "Track 1,,,,,Track 2\n";
+							plot << "Init. Offset (s),LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us),,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
+						}
+						plot << clockOffset << "," << LWOffsetError << ",";
+					}else if (track2){
+						plot << "," << LWOffsetError << ",";
+					}
+					break;
+				}
+				case 8:{
+					std::ofstream plot("results/raw/initial_skew.csv", std::ios::app);
+					if(track1){
+						if(run == 1 && clockSkew == 100){
+							plot << "Track 1,,,,,Track 2\n";
+							plot << "Init. Skew (ppm),LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us),,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
+						}
+						plot << clockSkew << "," << LWOffsetError << ",";
+					}else if (track2){
+						plot << "," << LWOffsetError << ",";
+					}
+					break;
+				}
+				case 9:{
+					std::ofstream plot("results/raw/LW_beacon_count.csv", std::ios::app);
+					if(track1){
+						if(run == 1 && beaconCount == 10){
+							plot << "Track 1,,,Track 2\n";
+							plot << "One-way Beacons,LW-Skew Error (ppm),,LW-Skew Error (ppm)\n";
+						}
+						plot << beaconCount << "," << LWSkewError << ",";
+					}else if (track2){
+						plot << "," << LWSkewError << "\n";
+					}
+					break;
+				}
+				case 10:{
+					LWPrintEnergyReport();
+					break;
+				}
+				default:{
+					break;
+				}
 			}
-			default:{
-				break;
+		}else{
+			switch (plotNum) {
+				case 0:{
+					LWPrintEnergyReport();
+					std::cout << "=== LW Results ===" << std::endl;
+					std::cout << "LW offset error = " <<LWOffsetError<<" us"<< std::endl;
+					std::cout << "LW skew error = " <<LWSkewError<<" ppm"<< std::endl;
+					break;
+				}
+				case 1:{
+					std::ofstream plot1a("results/raw/UWGS_velocity_(offset).csv", std::ios::app);
+					if (run == 1 && initVelocity == 0.5) {
+						plot1a << "Init. Velocity (m/s),LW-Offset Error (us),UWGS-Offset Error (us)\n";
+					}
+					plot1a << initVelocity << "," << LWOffsetError << ",";
+
+					std::ofstream plot1b("results/raw/UWGS_velocity_(skew).csv", std::ios::app);
+					if (run == 1 && initVelocity == 0.5) {
+						plot1b << "Init. Velocity (m/s),LW-Skew Error (PPM),UWGS-Skew Error (PPM)\n";
+					}
+					plot1b << initVelocity << "," << LWSkewError << ",";
+					break;
+				}
+				case 2:{
+					std::ofstream plot2a("results/raw/UWGS_position_noise_(offset).csv", std::ios::app);
+					if (run == 1 && trajPosNoiseStd == 0) {
+						plot2a << "Trajectory-position noise (m),LW-Offset Error (us),UWGS-Offset Error (us)\n";
+					}
+					plot2a << trajPosNoiseStd << "," << LWOffsetError << ",";
+
+					std::ofstream plot2b("results/raw/UWGS_position_noise_(skew).csv", std::ios::app);
+					if (run == 1 && trajPosNoiseStd == 0) {
+						plot2b << "Trajectory-position noise (m),LW-Skew Error (PPM),UWGS-Skew Error (PPM)\n";
+					}
+					plot2b << trajPosNoiseStd << "," << LWSkewError << ",";
+					break;
+				}
+				default:{
+					break;
+				}
 			}
 		}
 	};
