@@ -52,7 +52,7 @@ The same run number is used for protocols evaluated under the same parameter val
 ```bash
 SEED=1
 FIRST_RUN=1
-LAST_RUN=500
+LAST_RUN=1000
 
 for run in $(seq "${FIRST_RUN}" "${LAST_RUN}"); do
     ./ns3 run "scratch/LW-Sync --seed=${SEED} --run=${run}"
