@@ -23,7 +23,7 @@ One run is one independent realization for one combination of:
 - parameter value,
 - and simulation configuration.
 
-Therefore, 500 runs are executed for every plotted data point rather than 500 runs across the entire study.
+Therefore, 1000 runs are executed for every plotted data point rather than 1000 runs across the entire study.
 
 ## Random Variables
 
@@ -61,7 +61,7 @@ done
 
 ## Statistical Convention
 
-For each plotted parameter value, the mean is calculated from the 500 independent simulation runs as
+For each plotted parameter value, the mean is calculated from the 1000 independent simulation runs as
 
 $$\bar{x}\frac{1}{n}\sum_{i=1}^{n}x_i$$
 
