@@ -48,7 +48,7 @@ ax1.errorbar(message_count, t1_dc_avg, fmt='go-', label='DC-Sync (track1)', line
 ax1.errorbar(message_count, t2_dc_avg, fmt='yx-', label='DC-Sync (track2)', linewidth=2, markersize=8, capsize=4)
 ax1.set_xlabel('Two-way Message Exchange Pairs')
 ax1.set_ylabel('Skew Error (ppm)')
-ax1.set_title('DC-Sync')
+ax1.set_title('(a) DC-Sync')
 ax1.legend(loc='best')
 ax1.grid(True, alpha=0.3)
 ax1.set_yscale('log')
@@ -59,14 +59,14 @@ ax2.errorbar(beacon_count, t1_lw_avg, yerr=t1_lw_std, fmt='bs-', label='LW-Sync 
 ax2.errorbar(beacon_count, t2_lw_avg, yerr=t2_lw_std, fmt='X-', color='tab:orange', label='LW-Sync (track2)', linewidth=2, markersize=8, capsize=4)
 ax2.set_xlabel('One-way Beacons')
 ax2.set_ylabel('Skew Error (ppm)')
-ax2.set_title('LW-Sync')
+ax2.set_title('(b) LW-Sync')
 ax2.legend(loc='best')
 ax2.grid(True, alpha=0.3)
 ax2.set_xticks(beacon_count)
 plt.tight_layout()
 
 # Save figure
-save_path = figures_dir / 'messages count plot.png'
+save_path = figures_dir / 'messages_count_plot.png'
 plt.savefig(save_path, dpi=300, bbox_inches='tight')
 print(f"Figure saved: {save_path}")
 

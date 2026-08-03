@@ -28,6 +28,8 @@ uint32_t iterations = 0;
 
 bool UwgsEstimationDone = false;
 
+Ptr<NormalRandomVariable> timestampNoiseVar;
+
 class UWGSBeacon : public Application
 {
 public:
@@ -162,7 +164,7 @@ public:
 	UWGSOrdainry ();
 	virtual ~UWGSOrdainry ();
 
-	void SetParameters (double beaconInterval, double clockSkew, double clockOffset, double timeError);
+	void SetParameters (double beaconInterval, double clockSkew, double clockOffset);
 	void SetSoundSpeed (double speed);
 	void SetTrajectory (double x0, double y0, double velocity, double Ax, double omega, double t0);
 	void SetBeaconPosition (double xB, double yB);
@@ -192,7 +194,6 @@ private:
 	double m_soundSpeed;
 	double m_clockSkew;
 	double m_clockOffset;
-	double m_timeError;
 
 	double m_xO, m_yO, m_velocity, m_Ax, m_omega, m_t0;
 	double m_xB, m_yB;
@@ -208,7 +209,6 @@ UWGSOrdainry::UWGSOrdainry ()
     m_soundSpeed (1500.0),
 	m_clockSkew (0.0),
     m_clockOffset (0.0),
-    m_timeError (0.0),
     m_xO (100.0), m_yO (-500.0), m_velocity (2.0), m_Ax (3.0), m_omega (0.05), m_t0 (0.0),
     m_xB (0.0), m_yB (0.0)
 {
@@ -219,12 +219,11 @@ UWGSOrdainry::~UWGSOrdainry ()
 }
 
 void
-UWGSOrdainry::SetParameters (double beaconInterval, double clockSkew, double clockOffset, double timeError)
+UWGSOrdainry::SetParameters (double beaconInterval, double clockSkew, double clockOffset)
 {
 	m_beaconInterval = beaconInterval;
 	m_clockSkew = clockSkew;
 	m_clockOffset = clockOffset;
-	m_timeError = timeError;
 }
 
 void
@@ -277,14 +276,7 @@ UWGSOrdainry::ReceivePacket (Ptr<NetDevice> device, Ptr<const Packet> packet,
 	double serializationTime = ((packet->GetSize () + 3) * 8) / dataRate;
 	double tReceiveTrue = Simulator::Now ().GetSeconds () - serializationTime;
 
-	double timestampNoise = 0.0;
-	if (m_timeError > 0.0)
-	{
-		Ptr<NormalRandomVariable> jitterVar = CreateObject<NormalRandomVariable> ();
-		jitterVar->SetAttribute ("Mean", DoubleValue (0.0));
-		jitterVar->SetAttribute ("Variance", DoubleValue (m_timeError * m_timeError));
-		timestampNoise = jitterVar->GetValue ();
-	}
+	double timestampNoise = timestampNoiseVar->GetValue ();
 
 	double tLocal = tReceiveTrue * (1.0 + (m_clockSkew * 1e-6)) + m_clockOffset + timestampNoise;
 
@@ -434,8 +426,11 @@ UWGSOrdainry::RunEstimation ()
 	double estimatedSkew = 1.0 / a;
 	double estiamtedOffset = -b / a;
 
+	NS_LOG_DEBUG ("estimated skew = " << estimatedSkew);
+	NS_LOG_DEBUG ("estimated offset = " << estiamtedOffset);
+
 	UWGSSkewError = std::abs ((1 + (m_clockSkew * 1e-6)) - estimatedSkew) * 1e6;
-	UWGSOffsetError = std::abs ((m_clockOffset) - estiamtedOffset) * 1e6;
+	UWGSOffsetError = std::abs (m_clockOffset - estiamtedOffset) * 1e6;
 	UwgsEstimationDone = true;
 }
 
@@ -503,6 +498,11 @@ main (int argc, char *argv[])
 
 	double runtime = (beaconCount * beaconInterval) + 10;
 
+	timestampNoiseVar = CreateObject<NormalRandomVariable>();
+	timestampNoiseVar -> SetStream(1);
+	timestampNoiseVar -> SetAttribute("Mean", DoubleValue(0.0));
+	timestampNoiseVar -> SetAttribute("Variance", DoubleValue(timeError * timeError));
+
 	LogComponentEnable ("UanPhyGen", LOG_LEVEL_INFO);
 	LogComponentEnable ("UanMacAloha", LOG_LEVEL_INFO);
 	LogComponentEnable ("UanChannel", LOG_LEVEL_INFO);
@@ -528,16 +528,19 @@ main (int argc, char *argv[])
 		plot << "X,Y\n";
 	}
 
+	Ptr<NormalRandomVariable> xposNoiseVar = CreateObject<NormalRandomVariable> ();
+	xposNoiseVar -> SetStream(3);
+	xposNoiseVar->SetAttribute ("Mean", DoubleValue (0.0));
+	xposNoiseVar->SetAttribute ("Variance", DoubleValue (trajPosNoiseStd * trajPosNoiseStd));
+
+	Ptr<NormalRandomVariable> yposNoiseVar = CreateObject<NormalRandomVariable> ();
+	yposNoiseVar -> SetStream(4);
+	yposNoiseVar->SetAttribute ("Mean", DoubleValue (0.0));
+	yposNoiseVar->SetAttribute ("Variance", DoubleValue (trajPosNoiseStd * trajPosNoiseStd));
+
 	for (double t = 0; t <= runtime; t += 0.5)
 	{
-		Ptr<NormalRandomVariable> xposNoiseVar = CreateObject<NormalRandomVariable> ();
-		xposNoiseVar->SetAttribute ("Mean", DoubleValue (0.0));
-		xposNoiseVar->SetAttribute ("Variance", DoubleValue (trajPosNoiseStd * trajPosNoiseStd));
 		double nx = (trajPosNoiseStd > 0.0) ? xposNoiseVar->GetValue () : 0.0;
-
-		Ptr<NormalRandomVariable> yposNoiseVar = CreateObject<NormalRandomVariable> ();
-		yposNoiseVar->SetAttribute ("Mean", DoubleValue (0.0));
-		yposNoiseVar->SetAttribute ("Variance", DoubleValue (trajPosNoiseStd * trajPosNoiseStd));
 		double ny = (trajPosNoiseStd > 0.0) ? yposNoiseVar->GetValue () : 0.0;
 
 		double xt = 100 + Ax * std::sin (omega * t) + nx;
@@ -585,7 +588,7 @@ main (int argc, char *argv[])
 	UWGSBeaconApp->SetStartTime (Seconds (0));
 
 	Ptr<UWGSOrdainry> UWGSOridanryNodeApp = CreateObject<UWGSOrdainry> ();
-	UWGSOridanryNodeApp->SetParameters (beaconInterval, clockSkew, clockOffset, timeError);
+	UWGSOridanryNodeApp->SetParameters (beaconInterval, clockSkew, clockOffset);
 	UWGSOridanryNodeApp->SetSoundSpeed(soundSpeed);
 	UWGSOridanryNodeApp->SetTrajectory(100, -initDistance, initVelocity, Ax, omega, 0);
 	UWGSOridanryNodeApp->SetBeaconPosition(0, 0);
@@ -593,7 +596,8 @@ main (int argc, char *argv[])
 	UWGSNodes.Get (1)->AddApplication (UWGSOridanryNodeApp);
 	UWGSOridanryNodeApp->SetStartTime (Seconds (0));
 
-	auto PrintResults = [&] () {
+	auto UWGSPrintResults = [&] () {
+		double parameter = 0;
 		switch (plotNum) {
 			case 0:{
 				std::cout << "=== UWGS Results ===" << std::endl;
@@ -603,28 +607,35 @@ main (int argc, char *argv[])
 				break;
 			}
 			case 1:{
-				std::ofstream plot1a("results/raw/UWGS_velocity_(offset).csv", std::ios::app);
-				plot1a << UWGSOffsetError << "\n";
-
-				std::ofstream plot1b("results/raw/UWGS_velocity_(skew).csv", std::ios::app);
-				plot1b << UWGSSkewError << "\n";
+				parameter = initVelocity;
 				break;
 			}
 			case 2:{
-				std::ofstream plot2a("results/raw/UWGS_position_noise_(offset).csv", std::ios::app);
-				plot2a << UWGSOffsetError << "\n";
-
-				std::ofstream plot2b("results/raw/UWGS_position_noise_(skew).csv", std::ios::app);
-				plot2b << UWGSSkewError << "\n";
+				parameter = trajPosNoiseStd;
 				break;
 			}
 			default:{
 				break;
 			}
 		}
+		std::cout
+			<< "CSV_RESULT,"
+			<< run << ","
+			<< parameter << ","
+			<< "UWGS" << ",Offset,"
+			<< UWGSOffsetError
+			<< std::endl;
+
+		std::cout
+			<< "CSV_RESULT,"
+			<< run << ","
+			<< parameter << ","
+			<< "UWGS" << ",Skew,"
+			<< UWGSSkewError
+			<< std::endl;
 	};
 
-	Simulator::Schedule (Seconds (runtime), PrintResults);
+	Simulator::Schedule (Seconds (runtime), UWGSPrintResults);
 
 	Simulator::Stop (Seconds (runtime));
 	Simulator::Run ();

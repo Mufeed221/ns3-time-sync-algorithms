@@ -19,77 +19,43 @@ FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 # Default analytical parameters
 # ============================================================
 
-CLOCK_SKEW = 200e-6          # 200 ppm converted to fractional skew
-SOUND_SPEED = 1500.0         # m/s
-REPLY_TIME = 0.024           # seconds
+DEFAULT_CLOCK_SKEW = 200e-6   # 200 ppm as fractional skew
+SOUND_SPEED = 1500.0          # m/s
+REPLY_TIME = 0.024            # s
 
-DEFAULT_DISTANCE = 500.0     # meters
-DEFAULT_VELOCITY_ERROR = 0.2 # m/s
-DEFAULT_JITTER = 20e-6       # seconds
+DEFAULT_DISTANCE = 500.0      # m
+DEFAULT_VELOCITY_ERROR = 0.2  # m/s
+DEFAULT_JITTER = 20e-6        # s
 
 
 # ============================================================
-# Analytical maximum-error function
+# Analytical bound
 # ============================================================
 
-def analytical_bound_us(
-    distance_m: float,
-    velocity_error_mps: float,
-    jitter_s: float,
-) -> float:
-    propagation_delay = distance_m / SOUND_SPEED
+def analytical_bound_us(distance_m, velocity_error_mps, jitter_s, alpha):
+    tau = distance_m / SOUND_SPEED
 
-    skew_component = CLOCK_SKEW * (
-        2.0 * propagation_delay
-        + 0.5 * REPLY_TIME
+    bound_s = (
+        alpha * (2.0 * tau + 0.5 * REPLY_TIME)
+        + (velocity_error_mps / (2.0 * SOUND_SPEED))
+          * (((1.0 - 2.0 * alpha) * tau) + REPLY_TIME)
+        + (1.0 + alpha) * jitter_s
     )
 
-    velocity_component = (
-        velocity_error_mps / (2.0 * SOUND_SPEED)
-    ) * (
-        (1.0 - 2.0 * CLOCK_SKEW) * propagation_delay
-        + REPLY_TIME
-    )
-
-    jitter_component = (
-        1.0 + CLOCK_SKEW
-    ) * jitter_s
-
-    bound_seconds = (
-        skew_component
-        + velocity_component
-        + jitter_component
-    )
-
-    return bound_seconds * 1e6
+    return bound_s * 1e6
 
 
 # ============================================================
-# CSV-reading helper
+# CSV helper
 # ============================================================
 
-def read_columns(
-    csv_path: Path,
-    x_column: str,
-    mean_column: str,
-    std_column: str,
-):
+def read_columns(csv_path, x_column, mean_column, std_column):
     x_values = []
     means = []
-    standard_deviations = []
+    stds = []
 
     with csv_path.open("r", newline="", encoding="utf-8") as file:
         reader = csv.DictReader(file)
-
-        required_columns = {x_column, mean_column, std_column}
-        available_columns = set(reader.fieldnames or [])
-        missing_columns = required_columns - available_columns
-
-        if missing_columns:
-            raise ValueError(
-                f"Missing columns in {csv_path.name}: {sorted(missing_columns)}\n"
-                f"Available columns: {sorted(available_columns)}"
-            )
 
         for row in reader:
             x_text = row[x_column].strip()
@@ -104,52 +70,42 @@ def read_columns(
 
             x_values.append(float(x_text))
             means.append(float(mean_text))
-            standard_deviations.append(float(std_text))
+            stds.append(float(std_text))
 
-    if not x_values:
-        raise ValueError(f"No valid rows were read from {csv_path}")
-
-    ordered_rows = sorted(
-        zip(x_values, means, standard_deviations),
-        key=lambda row: row[0],
-    )
-
-    x_values, means, standard_deviations = map(list, zip(*ordered_rows))
-
-    return x_values, means, standard_deviations
+    ordered = sorted(zip(x_values, means, stds), key=lambda t: t[0])
+    x_values, means, stds = map(list, zip(*ordered))
+    return x_values, means, stds
 
 
 # ============================================================
-# Generic plotting helper
+# Plot helper
 # ============================================================
 
-def create_comparison_plot(
+def draw_subplot(
+    ax,
     x_values,
-    simulated_means,
-    simulated_stds,
+    means,
+    stds,
     analytical_bounds,
-    xlabel: str,
-    title: str,
-    output_filename: str,
+    xlabel,
+    subtitle,
 ):
-    fig, ax = plt.subplots(figsize=(8, 6))
-
-    # Analytical bound first, in gray.
+    # Analytical bound in gray
     ax.plot(
         x_values,
         analytical_bounds,
         marker="s",
         linewidth=1.8,
         color="gray",
-        label="Maximum analytical bound",
+        label="Analytical Error Bound",
         zorder=1,
     )
 
-    # Simulated mean ± sigma on top.
+    # Simulated mean ± sigma
     ax.errorbar(
         x_values,
-        simulated_means,
-        yerr=simulated_stds,
+        means,
+        yerr=stds,
         marker="o",
         linestyle="-",
         capsize=6,
@@ -162,141 +118,172 @@ def create_comparison_plot(
 
     ax.set_xlabel(xlabel)
     ax.set_ylabel(r"Offset Error ($\mu$s)")
-    ax.set_title(title)
+    ax.set_title(subtitle)
     ax.grid(True, alpha=0.3)
     ax.legend()
 
-    fig.tight_layout()
-
-    output_path = FIGURES_DIR / output_filename
-    fig.savefig(output_path, dpi=300, bbox_inches="tight")
-    print(f"Figure saved: {output_path}")
-
-    plt.close(fig)
-
 
 # ============================================================
-# Plot 1: Distance
+# Combined 2x2 figure
 # ============================================================
 
-def plot_distance_comparison():
-    csv_path = RESULTS_DIR / "distance_stats.csv"
+def main():
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    axes = axes.flatten()
 
-    distances, means, stds = read_columns(
-        csv_path=csv_path,
+    # --------------------------------------------------------
+    # (a) Distance
+    # --------------------------------------------------------
+    distance_csv = RESULTS_DIR / "distance_stats.csv"
+
+    distances, distance_means, distance_stds = read_columns(
+        distance_csv,
         x_column="Distance",
         mean_column="T1_LW_Avg",
         std_column="T1_LW_Std",
     )
 
-    analytical_bounds = [
+    distance_bounds = [
         analytical_bound_us(
-            distance_m=distance,
+            distance_m=d,
             velocity_error_mps=DEFAULT_VELOCITY_ERROR,
             jitter_s=DEFAULT_JITTER,
+            alpha=DEFAULT_CLOCK_SKEW,
         )
-        for distance in distances
+        for d in distances
     ]
 
-    create_comparison_plot(
-        x_values=distances,
-        simulated_means=means,
-        simulated_stds=stds,
-        analytical_bounds=analytical_bounds,
+    draw_subplot(
+        axes[0],
+        distances,
+        distance_means,
+        distance_stds,
+        distance_bounds,
         xlabel="Initial Distance (m)",
-        title="Maximum Analytical Bound vs. Simulated LW-Sync Error",
-        output_filename="analytical_bound vs distance.png",
+        subtitle="(a) Initial Distance",
     )
 
+    # --------------------------------------------------------
+    # (b) Jitter
+    # --------------------------------------------------------
+    jitter_csv = RESULTS_DIR / "jitter_noise_stats.csv"
 
-# ============================================================
-# Plot 2: Timestamp jitter
-# ============================================================
-
-def plot_jitter_comparison():
-    csv_path = RESULTS_DIR / "jitter_noise_stats.csv"
-
-    jitter_us, means, stds = read_columns(
-        csv_path=csv_path,
+    jitter_us, jitter_means, jitter_stds = read_columns(
+        jitter_csv,
         x_column="Jitter",
         mean_column="T1_LW_Avg",
         std_column="T1_LW_Std",
     )
 
-    analytical_bounds = [
+    jitter_bounds = [
         analytical_bound_us(
             distance_m=DEFAULT_DISTANCE,
             velocity_error_mps=DEFAULT_VELOCITY_ERROR,
-            jitter_s=jitter * 1e-6,
+            jitter_s=j * 1e-6,   # CSV is in microseconds
+            alpha=DEFAULT_CLOCK_SKEW,
         )
-        for jitter in jitter_us
+        for j in jitter_us
     ]
 
-    create_comparison_plot(
-        x_values=jitter_us,
-        simulated_means=means,
-        simulated_stds=stds,
-        analytical_bounds=analytical_bounds,
-        xlabel=r"Maximum Timestamp Error, $\delta_t$ ($\mu$s)",
-        title="Maximum Analytical Bound vs. Simulated LW-Sync Error",
-        output_filename="analytical bound vs jitter.png",
+    draw_subplot(
+        axes[1],
+        jitter_us,
+        jitter_means,
+        jitter_stds,
+        jitter_bounds,
+        xlabel=r"Jitter Std. Dev. (µs)",
+        subtitle="(b) Jitter Std. Dev.",
     )
 
+    # --------------------------------------------------------
+    # (c) Velocity noise
+    # --------------------------------------------------------
+    velocity_noise_csv = RESULTS_DIR / "velocity_noise_stats.csv"
 
-# ============================================================
-# Plot 3: Velocity error
-# ============================================================
-
-def plot_velocity_error_comparison():
-    csv_path = RESULTS_DIR / "velocity_noise_stats.csv"
-
-    velocity_errors, means, stds = read_columns(
-        csv_path=csv_path,
+    vel_noise, vel_means, vel_stds = read_columns(
+        velocity_noise_csv,
         x_column="Vel_Noise",
         mean_column="T1_LW_Avg",
         std_column="T1_LW_Std",
     )
 
-    # Ignore the first point where velocity noise = 0
-    filtered_rows = [
+    filtered = [
         (v, m, s)
-        for v, m, s in zip(velocity_errors, means, stds)
+        for v, m, s in zip(vel_noise, vel_means, vel_stds)
         if v != 0.0
     ]
 
-    velocity_errors = [row[0] for row in filtered_rows]
-    means = [row[1] for row in filtered_rows]
-    stds = [row[2] for row in filtered_rows]
+    vel_noise = [row[0] for row in filtered]
+    vel_means = [row[1] for row in filtered]
+    vel_stds = [row[2] for row in filtered]
 
-    analytical_bounds = [
+    vel_bounds = [
         analytical_bound_us(
             distance_m=DEFAULT_DISTANCE,
-            velocity_error_mps=velocity_error,
+            velocity_error_mps=v,
             jitter_s=DEFAULT_JITTER,
+            alpha=DEFAULT_CLOCK_SKEW,
         )
-        for velocity_error in velocity_errors
+        for v in vel_noise
     ]
 
-    create_comparison_plot(
-        x_values=velocity_errors,
-        simulated_means=means,
-        simulated_stds=stds,
-        analytical_bounds=analytical_bounds,
-        xlabel=r"Maximum Velocity Error, $\delta_v$ (m/s)",
-        title="Maximum Analytical Bound vs. Simulated LW-Sync Error",
-        output_filename="analytical_bound vs velocity_error.png",
+    draw_subplot(
+        axes[2],
+        vel_noise,
+        vel_means,
+        vel_stds,
+        vel_bounds,
+        xlabel=r"Velocity Error Std. Dev. (m/s)",
+        subtitle="(c) Velocity Error Std. Dev.",
     )
 
+    # --------------------------------------------------------
+    # (d) Initial skew
+    # --------------------------------------------------------
+    skew_csv = RESULTS_DIR / "initial_skew_stats.csv"
 
-# ============================================================
-# Main
-# ============================================================
+    # If your first column name is different, replace "ClockSkew"
+    # with the actual column name in initial_skew_stats.csv.
+    skew_ppm, skew_means, skew_stds = read_columns(
+        skew_csv,
+        x_column="ClockSkew",
+        mean_column="T1_LW_Avg",
+        std_column="T1_LW_Std",
+    )
 
-def main():
-    plot_distance_comparison()
-    plot_jitter_comparison()
-    plot_velocity_error_comparison()
-    print("All analytical-bound comparison plots were generated.")
+    skew_bounds = [
+        analytical_bound_us(
+            distance_m=DEFAULT_DISTANCE,
+            velocity_error_mps=DEFAULT_VELOCITY_ERROR,
+            jitter_s=DEFAULT_JITTER,
+            alpha=skew * 1e-6,   # ppm -> fractional skew
+        )
+        for skew in skew_ppm
+    ]
+
+    draw_subplot(
+        axes[3],
+        skew_ppm,
+        skew_means,
+        skew_stds,
+        skew_bounds,
+        xlabel="Initial Skew (ppm)",
+        subtitle="(d) Initial Skew",
+    )
+
+    fig.suptitle(
+        "Analytical error bound  vs. simulated LW-Sync error",
+        fontsize=14,
+    )
+
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+
+    save_path = FIGURES_DIR / "analytical_bound_comparison_combined.png"
+    plt.savefig(save_path, dpi=300, bbox_inches="tight")
+
+    print(f"Figure saved: {save_path}")
+
+    plt.show()
 
 
 if __name__ == "__main__":

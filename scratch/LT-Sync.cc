@@ -23,10 +23,13 @@ double acceleration;
 double LTOffsetError = 0;
 double LTSkewError = 0;
 
-bool track1 = false;
-bool track2 = true;
+bool track1 = true;
+bool track2 = false;
 
 double dataRate;
+
+Ptr<NormalRandomVariable> timestampNoiseVar;
+Ptr<NormalRandomVariable> velocityNoiseVar;
 
 class LTBeacon : public Application
 {
@@ -34,7 +37,7 @@ public:
 	LTBeacon ();
 	virtual ~LTBeacon ();
 
-	void SetParameters (double replyInterval, double timingError, double velocityError);
+	void SetParameters (double replyInterval);
 	void SetSoundSpeed (double speed);
 	void SetCarrierFreq (double freq);
 	void SetPacketSize (uint32_t size);
@@ -58,8 +61,6 @@ private:
 	double m_T1, m_T4, m_T5;
 	double m_estimatedVelocity;
 	double m_estimatedDistance;
-	double m_timeError;
-	double m_velocityError;
 	uint32_t m_pktSize;
 	Mac8Address m_ordinaryAddress;
 };
@@ -74,8 +75,6 @@ LTBeacon::LTBeacon ()
 	m_T5 (0.0),
 	m_estimatedVelocity (0.0),
 	m_estimatedDistance (0.0),
-	m_timeError (20e-6),
-	m_velocityError (0.2),
 	m_pktSize (60)
 {
 }
@@ -85,11 +84,9 @@ LTBeacon::~LTBeacon ()
 }
 
 void
-LTBeacon::SetParameters (double replyInterval, double timingError, double velocityError)
+LTBeacon::SetParameters (double replyInterval)
 {
 	m_replyInterval = replyInterval;
-	m_timeError = timingError;
-	m_velocityError = velocityError;
 }
 
 void
@@ -150,7 +147,7 @@ public:
 	LTOrdinary ();
 	virtual ~LTOrdinary ();
 
-	void SetParameters (double replyInterval, double clockSkew, double clockOffset, double timingError, double velocityError);
+	void SetParameters (double replyInterval, double clockSkew, double clockOffset);
 	void SetSoundSpeed (double speed);
 	void SetCarrierFreq (double freq);
 	void SetPacketSize (uint32_t size);
@@ -176,8 +173,6 @@ private:
 	double m_T1, m_T2, m_T3, m_T4, m_T5, m_T6;
 	double m_soundSpeed;
 	double m_carrierFreq;
-	double m_timeError;
-	double m_velocityError;
 	uint32_t m_pktSize;
 	Mac8Address m_beaconAddress;
 
@@ -203,19 +198,15 @@ LTOrdinary::LTOrdinary ()
 	m_T6 (0.0),
     m_soundSpeed (1500.0),
     m_carrierFreq (20000.0),
-	m_timeError (20e-6),
-	m_velocityError (0.2),
 	m_pktSize (60)
 {
 }
 
 void
-LTOrdinary::SetParameters (double replyInterval, double clockSkew, double clockOffset, double timingError, double velocityError){
+LTOrdinary::SetParameters (double replyInterval, double clockSkew, double clockOffset){
 	m_replyInterval = replyInterval;
 	m_clockSkew = clockSkew;
 	m_clockOffset = clockOffset;
-	m_timeError = timingError;
-	m_velocityError = velocityError;
 }
 
 void
@@ -330,9 +321,6 @@ LTBeacon::SendWakeup(){
 
 bool
 LTOrdinary::ReceivePacket(Ptr<NetDevice> device, Ptr<const Packet> packet, uint16_t protocol, const Address &sender){
-	Ptr<NormalRandomVariable> timestampNoiseVar = CreateObject<NormalRandomVariable>();
-	timestampNoiseVar->SetAttribute("Mean", DoubleValue(0.0));
-	timestampNoiseVar->SetAttribute("Variance", DoubleValue(m_timeError * m_timeError));
 	double timestampNoise = timestampNoiseVar->GetValue();
 
 	double serialization_time = ((packet->GetSize() + 3) * 8) / 20000.0;
@@ -384,8 +372,8 @@ LTOrdinary::ReceivePacket(Ptr<NetDevice> device, Ptr<const Packet> packet, uint1
 		NS_LOG_DEBUG ("estimated skew = " << m_estimatedSkew);
 		NS_LOG_DEBUG ("estimated offset = " << m_estimatedOffset);
 
-		LTSkewError = std::abs(std::abs(m_estimatedSkew) - std::abs(1 + (m_clockSkew * 1e-6))) * 1e6;
-		LTOffsetError = std::abs(std::abs(m_estimatedOffset) - std::abs(m_clockOffset)) * 1e6;
+		LTSkewError = std::abs((1 + (m_clockSkew * 1e-6)) - m_estimatedSkew) * 1e6;
+		LTOffsetError = std::abs(m_clockOffset - m_estimatedOffset) * 1e6;
 	}
 	return true;
 }
@@ -399,6 +387,9 @@ LTOrdinary::SendReply(){
 		double T2;
 		double T3;
 	} data;
+
+	data.T2 = m_T2;
+	data.T3 = m_T3;
 
 	Ptr<Packet> packet = Create<Packet> (reinterpret_cast<const uint8_t*> (&data), sizeof(data));
 
@@ -420,16 +411,10 @@ LTBeacon::ReceivePacket (Ptr<NetDevice> device, Ptr<const Packet> packet, uint16
 	double serialization_time = ((packet->GetSize() + 3) * 8) / dataRate;   // 20 kbps
 	double TReceive = Simulator::Now().GetSeconds() - serialization_time;
 
-	Ptr<NormalRandomVariable> timestampNoiseVar = CreateObject<NormalRandomVariable>();
-	timestampNoiseVar->SetAttribute("Mean", DoubleValue(0.0));
-	timestampNoiseVar->SetAttribute("Variance", DoubleValue(m_timeError * m_timeError));
 	double timestampNoise = timestampNoiseVar->GetValue();
 
 	TReceive = TReceive + timestampNoise;
 
-	Ptr<NormalRandomVariable> velocityNoiseVar = CreateObject<NormalRandomVariable>();
-	velocityNoiseVar->SetAttribute("Mean", DoubleValue(0.0));
-	velocityNoiseVar->SetAttribute("Variance", DoubleValue(m_velocityError * m_velocityError));
 	double velocityNoise = velocityNoiseVar->GetValue();
 
 	Ptr<Packet> p = packet->Copy();
@@ -562,6 +547,16 @@ main (int argc, char *argv[])
 
 	double runtime = 20;
 
+	timestampNoiseVar = CreateObject<NormalRandomVariable>();
+	timestampNoiseVar -> SetStream(1);
+	timestampNoiseVar -> SetAttribute("Mean", DoubleValue(0.0));
+	timestampNoiseVar -> SetAttribute("Variance", DoubleValue(timeError * timeError));
+
+	velocityNoiseVar = CreateObject<NormalRandomVariable>();
+	velocityNoiseVar -> SetStream(2);
+	velocityNoiseVar -> SetAttribute("Mean", DoubleValue(0.0));
+	velocityNoiseVar -> SetAttribute("Variance", DoubleValue(velocityError * velocityError));
+
 	// Enable detailed UAN logging - use INFO level to see timing information
 	LogComponentEnable ("UanPhyGen", LOG_LEVEL_INFO);
 	LogComponentEnable ("UanMacAloha", LOG_LEVEL_INFO);
@@ -667,7 +662,7 @@ main (int argc, char *argv[])
 	// Create applications
 	// Beacon application
 	LTBeaconApp = CreateObject<LTBeacon> ();
-	LTBeaconApp->SetParameters (LTReplyInterval, timeError, velocityError);
+	LTBeaconApp->SetParameters (LTReplyInterval);
 	LTBeaconApp->SetSoundSpeed (soundSpeed);
 	LTBeaconApp->SetCarrierFreq (carrierFreq);
 	LTBeaconApp->SetPacketSize (pktSize);
@@ -677,7 +672,7 @@ main (int argc, char *argv[])
 
 	// Ordinary application
 	LTOrdinaryApp = CreateObject<LTOrdinary> ();
-	LTOrdinaryApp->SetParameters (LTReplyInterval, clockSkew, clockOffset, timeError, velocityError);
+	LTOrdinaryApp->SetParameters (LTReplyInterval, clockSkew, clockOffset);
 	LTOrdinaryApp->SetSoundSpeed (soundSpeed);
 	LTOrdinaryApp->SetCarrierFreq (carrierFreq);
 	LTOrdinaryApp->SetPacketSize (pktSize);
@@ -685,7 +680,43 @@ main (int argc, char *argv[])
 	LTNodes.Get (1)->AddApplication (LTOrdinaryApp);
 	LTOrdinaryApp->SetStartTime (Seconds (0));
 
-	auto PrintResults = [&]() {
+	auto LTPrintResults = [&]() {
+		double parameter = 0;
+		int angle = 0;
+		switch (angleIndex){
+			case 0:{
+				angle = 0;
+				break;
+			}
+			case 1:{
+				angle = 45;
+				break;
+			}
+			case 2:{
+				angle = 90;
+				break;
+			}
+			case 3:{
+				angle = 135;
+				break;
+			}
+			case 4:{
+				angle = 180;
+				break;
+			}
+			case 5:{
+				angle = 225;
+				break;
+			}
+			case 6:{
+				angle = 270;
+				break;
+			}
+			case 7:{
+				angle = 315;
+				break;
+			}
+		}
 		switch (plotNum) {
 			case 0:{
 				std::cout << "=== LT Results ===" << std::endl;
@@ -693,82 +724,44 @@ main (int argc, char *argv[])
 				std::cout << "LT skew error = " <<LTSkewError<<" ppm"<< std::endl;
 				break;
 			}
-			case 1:{
-				std::ofstream plot("results/raw/distance.csv", std::ios::app);
-				if (track1) {
-				    plot << LTOffsetError << ",";
+			case 1:
+			{
+				if(track2){
+					initDistance = initDistance + radius;
 				}
-				else if (track2) {
-				    plot << LTOffsetError << ",";
-				}
-			break;
+				parameter = initDistance;
+				break;
 			}
 			case 2:{
-				std::ofstream plot("results/raw/angle.csv", std::ios::app);
-				plot << LTOffsetError << ",";
-			break;
+				parameter = angle;
+				break;
 			}
 			case 3:{
-				std::ofstream plot("results/raw/velocity.csv", std::ios::app);
-				plot << LTOffsetError << ",";
-			break;
+				parameter = initVelocity;
+				break;
 			}
 			case 4:{
-				std::ofstream plot("results/raw/acceleration.csv", std::ios::app);
-				plot << LTOffsetError << ",";
-			break;
+				parameter = acceleration;
+				break;
 			}
 			case 5:{
-				std::ofstream plot("results/raw/velocity_noise.csv", std::ios::app);
-				if (track1) {
-				    plot << LTOffsetError << ",";
-				}
-				else if (track2) {
-				    plot << LTOffsetError << ",";
-				}
+				parameter = velocityError;
 				break;
 			}
 			case 6:{
-				std::ofstream plot("results/raw/jitter_noise.csv", std::ios::app);
-				if (track1) {
-				    plot << LTOffsetError << ",";
-				}
-				else if (track2) {
-				    plot << LTOffsetError << ",";
-				}
+				parameter = timeError * 1e6;
 				break;
 			}
 			case 7:{
-				std::ofstream plot("results/raw/initial_offset.csv", std::ios::app);
-				if (track1) {
-				    plot << LTOffsetError << ",";
-				}
-				else if (track2) {
-				    plot << LTOffsetError << ",";
-				}
+				parameter = clockOffset;
 				break;
 			}
 			case 8:{
-				std::ofstream plot("results/raw/initial_skew.csv", std::ios::app);
-				if (track1) {
-				    plot << LTOffsetError << ",";
-				}
-				else if (track2) {
-				    plot << LTOffsetError << ",";
-				}
+				parameter = clockSkew;
 				break;
 			}
 			case 9:{
-				std::ofstream plot("results/raw/LT_skew_estimate.csv", std::ios::app);
-				if(track1){
-					if(run == 1){
-						plot << "Track 1,,,Track 2\n";
-						plot << "Run,LT-Skew Error (ppm),,LT-Skew Error (ppm)\n";
-					}
-					plot << run << "," << LTSkewError << ",";
-				}else if (track2){
-					plot << "," << LTSkewError << "\n";
-				}
+				parameter = run;
 				break;
 			}
 			case 10:{
@@ -779,9 +772,22 @@ main (int argc, char *argv[])
 				break;
 			}
 		}
+		double error = LTOffsetError;
+		if(plotNum == 9){
+			error = LTSkewError;
+		}
+		const int trackNumber = track1 ? 1 : 2;
+			std::cout
+				<< "CSV_RESULT,"
+				<< run << ","
+				<< parameter << ","
+				<< trackNumber << ","
+				<< "LT-Sync" << ","
+				<< error
+				<< std::endl;
 	};
 
-	Simulator::Schedule (Seconds (runtime), PrintResults);
+	Simulator::Schedule (Seconds (runtime), LTPrintResults);
 
 	Simulator::Stop (Seconds(runtime));
 	Simulator::Run ();

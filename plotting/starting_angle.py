@@ -25,7 +25,7 @@ with open(csv_path, 'r') as file:
 print(f"Data loaded: {len(angle)} rows")
 
 # Create and save plot
-fig, ax1 = plt.subplots(figsize=(14, 6))
+fig, ax1 = plt.subplots(figsize=(8, 6))
 
 # Plot averages
 ax1.plot(angle, lt_avg, 'r^-', label='LT-Sync', linewidth=2, markersize=8)
@@ -33,14 +33,13 @@ ax1.plot(angle, lw_avg, 'bs-', label='LW-Sync', linewidth=2, markersize=8)
 ax1.plot(angle, dc_avg, 'go-', label='DC-Sync', linewidth=2, markersize=8)
 ax1.set_xlabel('Angle°')
 ax1.set_ylabel('Offset Error (µs)')
-ax1.set_title('Starting Angle Analysis')
 ax1.legend(loc='best')
 ax1.grid(True, alpha=0.3)
 ax1.set_xticks(angle)
 plt.tight_layout()
 
 # Save figure
-save_path = figures_dir / 'starting angle plot.png'
+save_path = figures_dir / 'starting_angle_plot.png'
 plt.savefig(save_path, dpi=300, bbox_inches='tight')
 print(f"Figure saved: {save_path}")
 

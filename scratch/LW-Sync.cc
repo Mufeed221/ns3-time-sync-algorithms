@@ -23,11 +23,14 @@ double acceleration;
 double LWOffsetError = 0;
 double LWSkewError = 0;
 
-bool track1 = false;
-bool track2 = true;
+bool track1 = true;
+bool track2 = false;
 bool trackUWGS = false;
 
 double dataRate;
+
+Ptr<NormalRandomVariable> timestampNoiseVar;
+Ptr<NormalRandomVariable> velocityNoiseVar;
 
 class LWBeacon : public Application
 {
@@ -35,7 +38,7 @@ public:
 	LWBeacon ();
 	virtual ~LWBeacon ();
 
-	void SetParameters (double beaconInterval, uint32_t beaconCount, double timingError, double velocityError);
+	void SetParameters (double beaconInterval, uint32_t beaconCount);
 	void SetSoundSpeed (double speed);
 	void SetCarrierFreq (double freq);
 	void SetPacketSize (uint32_t size);
@@ -61,8 +64,6 @@ private:
 	double m_T3;
 	double m_soundSpeed;
 	double m_carrierFreq;
-	double m_timeError;
-	double m_velocityError;
 	uint32_t m_pktSize;
 	Mac8Address m_ordinaryAddress;
 
@@ -79,8 +80,6 @@ LWBeacon::LWBeacon ()
 	m_T3 (0.0),
     m_soundSpeed (1500.0),
     m_carrierFreq (20000.0),
-	m_timeError (20e-6),
-	m_velocityError (0.2),
 	m_pktSize (60)
 {
 }
@@ -90,12 +89,10 @@ LWBeacon::~LWBeacon ()
 }
 
 void
-LWBeacon::SetParameters (double beaconInterval, uint32_t beaconCount, double timingError, double velocityError)
+LWBeacon::SetParameters (double beaconInterval, uint32_t beaconCount)
 {
 	m_beaconInterval = beaconInterval;
 	m_beaconCount = beaconCount;
-	m_timeError = timingError;
-	m_velocityError = velocityError;
 }
 
 void
@@ -156,7 +153,7 @@ public:
 	LWOrdinary ();
 	virtual ~LWOrdinary ();
 
-	void SetParameters (uint32_t beaconCount, double clockSkew, double clockOffset, double timingError, double velocityError);
+	void SetParameters (uint32_t beaconCount, double clockSkew, double clockOffset);
 	void SetSoundSpeed (double speed);
 	void SetCarrierFreq (double freq);
 	void SetPacketSize (uint32_t size);
@@ -186,8 +183,6 @@ private:
 	double m_T5;
 	double m_soundSpeed;
 	double m_carrierFreq;
-	double m_timeError;
-	double m_velocityError;
 	uint32_t m_pktSize;
 	Mac8Address m_beaconAddress;
 
@@ -217,19 +212,15 @@ LWOrdinary::LWOrdinary ()
 	m_T5 (0.0),
     m_soundSpeed (1500.0),
     m_carrierFreq (20000.0),
-	m_timeError (20e-6),
-	m_velocityError (0.2),
 	m_pktSize (60)
 {
 }
 
 void
-LWOrdinary::SetParameters (uint32_t beaconCount, double clockSkew, double clockOffset, double timingError, double velocityError){
+LWOrdinary::SetParameters (uint32_t beaconCount, double clockSkew, double clockOffset){
 	m_beaconCount = beaconCount;
 	m_clockSkew = clockSkew;
 	m_clockOffset = clockOffset;
-	m_timeError = timingError;
-	m_velocityError = velocityError;
 }
 
 void
@@ -353,16 +344,10 @@ LWBeacon::ReceivePacket (Ptr<NetDevice> device, Ptr<const Packet> packet, uint16
 	double serialization_time = ((packet->GetSize() + 3) * 8) / dataRate;
 	double TReceive = Simulator::Now().GetSeconds() - serialization_time;
 
-	Ptr<NormalRandomVariable> timestampNoiseVar = CreateObject<NormalRandomVariable>();
-	timestampNoiseVar->SetAttribute("Mean", DoubleValue(0.0));
-	timestampNoiseVar->SetAttribute("Variance", DoubleValue(m_timeError * m_timeError));
 	double timestampNoise = timestampNoiseVar->GetValue();
 
 	TReceive = TReceive + timestampNoise;
 
-	Ptr<NormalRandomVariable> velocityNoiseVar = CreateObject<NormalRandomVariable>();
-	velocityNoiseVar->SetAttribute("Mean", DoubleValue(0.0));
-	velocityNoiseVar->SetAttribute("Variance", DoubleValue(m_velocityError * m_velocityError));
 	double velocityNoise = velocityNoiseVar->GetValue();
 
 	Ptr<Packet> p = packet->Copy();
@@ -392,7 +377,7 @@ LWBeacon::ReceivePacket (Ptr<NetDevice> device, Ptr<const Packet> packet, uint16
 
 		m_estimatedOffset = (((T6 - data.T4) + (m_T3 - data.T5)) / 2) - n;
 
-		NS_LOG_DEBUG("LWBeacon received reply at :"<< TReceive<< " s, Packet size :"<< packet->GetSize()<< " Bytes");
+		NS_LOG_DEBUG("LWBeacon received reply at :"<< TReceive << " s, Packet size :"<< packet->GetSize()<< " Bytes");
 
 		Simulator::ScheduleNow(&LWBeacon::SendBeacons, this);
 	}
@@ -472,9 +457,6 @@ LWBeacon::SendBeacons()
 
 bool
 LWOrdinary::ReceivePacket(Ptr<NetDevice> device, Ptr<const Packet> packet, uint16_t protocol, const Address &sender){
-	Ptr<NormalRandomVariable> timestampNoiseVar = CreateObject<NormalRandomVariable>();
-	timestampNoiseVar->SetAttribute("Mean", DoubleValue(0.0));
-	timestampNoiseVar->SetAttribute("Variance", DoubleValue(m_timeError * m_timeError));
 	double timestampNoise = timestampNoiseVar->GetValue();
 
 	double serialization_time = ((packet->GetSize() + 3) * 8) / 20000.0;
@@ -485,9 +467,6 @@ LWOrdinary::ReceivePacket(Ptr<NetDevice> device, Ptr<const Packet> packet, uint1
 
 	if(m_sendCount == 1){
 		m_sendCount++;
-		Ptr<NormalRandomVariable> velocityNoiseVar = CreateObject<NormalRandomVariable>();
-		velocityNoiseVar->SetAttribute("Mean", DoubleValue(0.0));
-		velocityNoiseVar->SetAttribute("Variance", DoubleValue(m_velocityError * m_velocityError));
 		double velocityNoise = velocityNoiseVar->GetValue();
 		struct Reply_Data {
 			double T2;
@@ -504,9 +483,6 @@ LWOrdinary::ReceivePacket(Ptr<NetDevice> device, Ptr<const Packet> packet, uint1
 
 		Simulator::ScheduleNow(&LWOrdinary::SendReply, this, V4);
 	}else{
-		Ptr<NormalRandomVariable> velocityNoiseVar = CreateObject<NormalRandomVariable>();
-		velocityNoiseVar->SetAttribute("Mean", DoubleValue(0.0));
-		velocityNoiseVar->SetAttribute("Variance", DoubleValue(m_velocityError * m_velocityError));
 		double velocityNoise = velocityNoiseVar->GetValue();
 		currentVelocity = LWGetVelocity() + velocityNoise;
 
@@ -554,8 +530,8 @@ LWOrdinary::ReceivePacket(Ptr<NetDevice> device, Ptr<const Packet> packet, uint1
 			m_averageSkew = m_averageSkew / (m_beaconCount-1);
 			m_estimatedSkew = m_averageSkew;
 
-			LWOffsetError = std::abs(std::abs(m_estimatedOffset) - std::abs(m_clockOffset))*1e6;
-			LWSkewError = std::abs((((m_clockSkew*1e-6)) - std::abs(m_estimatedSkew)))*1e6;
+			LWOffsetError = std::abs(m_clockOffset + m_estimatedOffset)*1e6;
+			LWSkewError = std::abs(((m_clockSkew*1e-6) + m_estimatedSkew))*1e6;
 		}
 	}
 
@@ -680,6 +656,16 @@ main (int argc, char *argv[])
 
 	double runtime = (beaconCount * LWBeaconInterval) + 10;
 
+	timestampNoiseVar = CreateObject<NormalRandomVariable>();
+	timestampNoiseVar -> SetStream(1);
+	timestampNoiseVar -> SetAttribute("Mean", DoubleValue(0.0));
+	timestampNoiseVar -> SetAttribute("Variance", DoubleValue(timeError * timeError));
+
+	velocityNoiseVar = CreateObject<NormalRandomVariable>();
+	velocityNoiseVar -> SetStream(2);
+	velocityNoiseVar -> SetAttribute("Mean", DoubleValue(0.0));
+	velocityNoiseVar -> SetAttribute("Variance", DoubleValue(velocityError * velocityError));
+
 	// Enable detailed UAN logging - use INFO level to see timing information
 	LogComponentEnable ("UanPhyGen", LOG_LEVEL_INFO);
 	LogComponentEnable ("UanMacAloha", LOG_LEVEL_INFO);
@@ -726,16 +712,19 @@ main (int argc, char *argv[])
 		omega = 0.05;                   // bending angular frequency [rad/s]
 		double Ax = 3.0;                // horizontal bending amplitude [m]
 
+		Ptr<NormalRandomVariable> xposNoiseVar = CreateObject<NormalRandomVariable> ();
+		xposNoiseVar -> SetStream(3);
+		xposNoiseVar->SetAttribute ("Mean", DoubleValue (0.0));
+		xposNoiseVar->SetAttribute ("Variance", DoubleValue (trajPosNoiseStd * trajPosNoiseStd));
+
+		Ptr<NormalRandomVariable> yposNoiseVar = CreateObject<NormalRandomVariable> ();
+		yposNoiseVar -> SetStream(4);
+		yposNoiseVar->SetAttribute ("Mean", DoubleValue (0.0));
+		yposNoiseVar->SetAttribute ("Variance", DoubleValue (trajPosNoiseStd * trajPosNoiseStd));
+
 		for (double t = 0; t <= runtime; t += 0.5)
 		{
-			Ptr<NormalRandomVariable> xposNoiseVar = CreateObject<NormalRandomVariable> ();
-			xposNoiseVar->SetAttribute ("Mean", DoubleValue (0.0));
-			xposNoiseVar->SetAttribute ("Variance", DoubleValue (trajPosNoiseStd * trajPosNoiseStd));
 			double nx = (trajPosNoiseStd > 0.0) ? xposNoiseVar->GetValue () : 0.0;
-
-			Ptr<NormalRandomVariable> yposNoiseVar = CreateObject<NormalRandomVariable> ();
-			yposNoiseVar->SetAttribute ("Mean", DoubleValue (0.0));
-			yposNoiseVar->SetAttribute ("Variance", DoubleValue (trajPosNoiseStd * trajPosNoiseStd));
 			double ny = (trajPosNoiseStd > 0.0) ? yposNoiseVar->GetValue () : 0.0;
 
 			double xt = 0 + Ax * std::sin (omega * t) + nx;
@@ -810,7 +799,7 @@ main (int argc, char *argv[])
 	// Create applications
 	// Beacon application
 	LWBeaconApp = CreateObject<LWBeacon> ();
-	LWBeaconApp->SetParameters (LWBeaconInterval, beaconCount, timeError, velocityError);
+	LWBeaconApp->SetParameters (LWBeaconInterval, beaconCount);
 	LWBeaconApp->SetSoundSpeed (soundSpeed);
 	LWBeaconApp->SetCarrierFreq (carrierFreq);
 	LWBeaconApp->SetPacketSize (pktSize);
@@ -820,7 +809,7 @@ main (int argc, char *argv[])
 
 	// Ordinary application
 	LWOrdinaryApp = CreateObject<LWOrdinary> ();
-	LWOrdinaryApp->SetParameters (beaconCount, clockSkew, clockOffset, timeError, velocityError);
+	LWOrdinaryApp->SetParameters (beaconCount, clockSkew, clockOffset);
 	LWOrdinaryApp->SetSoundSpeed (soundSpeed);
 	LWOrdinaryApp->SetCarrierFreq (carrierFreq);
 	LWOrdinaryApp->SetPacketSize (pktSize);
@@ -828,7 +817,7 @@ main (int argc, char *argv[])
 	LWNodes.Get (1)->AddApplication (LWOrdinaryApp);
 	LWOrdinaryApp->SetStartTime (Seconds (0));
 
-	auto PrintResuLWs = [&]() {
+	auto LWPrintResults = [&]() {
 		int angle = 0;
 		switch (angleIndex){
 			case 0:{
@@ -866,6 +855,7 @@ main (int argc, char *argv[])
 		}
 
 		if(!trackUWGS){
+			double parameter = 0;
 			switch (plotNum) {
 				case 0:{
 					std::cout << "=== LW Results ===" << std::endl;
@@ -873,107 +863,44 @@ main (int argc, char *argv[])
 					std::cout << "LW skew error = " <<LWSkewError<<" ppm"<< std::endl;
 					break;
 				}
-				case 1:{
-					std::ofstream plot("results/raw/distance.csv", std::ios::app);
-					if (track1) {
-						if (run == 1 && initDistance == 500) {
-							plot << "Track 1,,,,,Track 2\n";
-							plot << "Init. Distance (m),LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us),,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
-						}
-						plot << initDistance << "," << LWOffsetError << ",";
+				case 1:
+				{
+					if(track2){
+						initDistance = initDistance + radius;
 					}
-					else if (track2) {
-						plot << "," << LWOffsetError << ",";
-					}
-				break;
+					parameter = initDistance;
+				    break;
 				}
 				case 2:{
-					std::ofstream plot("results/raw/angle.csv", std::ios::app);
-					if (run == 1 && angle == 0) {
-						plot << "Init. Node Angle,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
-					}
-					plot << angle << "," << LWOffsetError << ",";
-				break;
+					parameter = angle;
+					break;
 				}
 				case 3:{
-					std::ofstream plot("results/raw/velocity.csv", std::ios::app);
-					if (run == 1 && initVelocity == 0) {
-						plot << "Init. Radial Velocity (m/s),LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
-					}
-					plot << initVelocity << "," << LWOffsetError << ",";
-				break;
+					parameter = initVelocity;
+					break;
 				}
 				case 4:{
-					std::ofstream plot("results/raw/acceleration.csv", std::ios::app);
-					if (run == 1 && acceleration == 0.01) {
-						plot << "Acceleration,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
-					}
-					plot << acceleration << "," << LWOffsetError << ",";
-				break;
+					parameter = acceleration;
+					break;
 				}
 				case 5:{
-					std::ofstream plot("results/raw/velocity_noise.csv", std::ios::app);
-					if(track1){
-						if(run == 1 && velocityError == 0.0){
-							plot << "Track 1,,,,,Track 2\n";
-							plot << "STD. Dev. Velocity Noise (m/s),LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us),,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
-						}
-						plot << velocityError << "," << LWOffsetError << ",";
-					}else if (track2){
-						plot << "," << LWOffsetError << ",";
-					}
+					parameter = velocityError;
 					break;
 				}
 				case 6:{
-					std::ofstream plot("results/raw/jitter_noise.csv", std::ios::app);
-					if(track1){
-						if(run == 1 && timeError == 10e-6){
-							plot << "Track 1,,,,,Track 2\n";
-							plot << "STD. Dev. Jitter Noise (us),LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us),,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
-						}
-						plot << timeError * 1e6 << "," << LWOffsetError << ",";
-					}else if (track2){
-						plot << "," << LWOffsetError << ",";
-					}
+					parameter = timeError * 1e6;
 					break;
 				}
 				case 7:{
-					std::ofstream plot("results/raw/initial_offset.csv", std::ios::app);
-					if(track1){
-						if(run == 1 && clockOffset == 0.02){
-							plot << "Track 1,,,,,Track 2\n";
-							plot << "Init. Offset (s),LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us),,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
-						}
-						plot << clockOffset << "," << LWOffsetError << ",";
-					}else if (track2){
-						plot << "," << LWOffsetError << ",";
-					}
+					parameter = clockOffset;
 					break;
 				}
 				case 8:{
-					std::ofstream plot("results/raw/initial_skew.csv", std::ios::app);
-					if(track1){
-						if(run == 1 && clockSkew == 100){
-							plot << "Track 1,,,,,Track 2\n";
-							plot << "Init. Skew (ppm),LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us),,LW-Offset Error (us),LT-Offset Error (us),DC-Offset Error (us)\n";
-						}
-						plot << clockSkew << "," << LWOffsetError << ",";
-					}else if (track2){
-						plot << "," << LWOffsetError << ",";
-					}
+					parameter = clockSkew;
 					break;
 				}
 				case 9:{
-					std::ofstream plot("results/raw/LW_beacon_count.csv", std::ios::app);
-					if(track1){
-						if(run == 1 && beaconCount == 10){
-							plot << "Track 1,,,Track 2\n";
-							plot << "One-way Beacons,LW-Skew Error (ppm),,LW-Skew Error (ppm)\n";
-						}
-						plot << beaconCount << "," << LWSkewError << ",";
-					}else if (track2){
-						plot << "," << LWSkewError << "\n";
-					}
+					parameter = beaconCount;
 					break;
 				}
 				case 10:{
@@ -984,7 +911,21 @@ main (int argc, char *argv[])
 					break;
 				}
 			}
+			double error = LWOffsetError;
+			if(plotNum == 9){
+				error = LWSkewError;
+			}
+			const int trackNumber = track1 ? 1 : 2;
+		    std::cout
+		        << "CSV_RESULT,"
+		        << run << ","
+		        << parameter << ","
+		        << trackNumber << ","
+		        << "LW-Sync" << ","
+		        << error
+		        << std::endl;
 		}else{
+			double parameter = 0;
 			switch (plotNum) {
 				case 0:{
 					LWPrintEnergyReport();
@@ -994,41 +935,36 @@ main (int argc, char *argv[])
 					break;
 				}
 				case 1:{
-					std::ofstream plot1a("results/raw/UWGS_velocity_(offset).csv", std::ios::app);
-					if (run == 1 && initVelocity == 0.5) {
-						plot1a << "Init. Velocity (m/s),LW-Offset Error (us),UWGS-Offset Error (us)\n";
-					}
-					plot1a << initVelocity << "," << LWOffsetError << ",";
-
-					std::ofstream plot1b("results/raw/UWGS_velocity_(skew).csv", std::ios::app);
-					if (run == 1 && initVelocity == 0.5) {
-						plot1b << "Init. Velocity (m/s),LW-Skew Error (PPM),UWGS-Skew Error (PPM)\n";
-					}
-					plot1b << initVelocity << "," << LWSkewError << ",";
+					parameter = initVelocity;
 					break;
 				}
 				case 2:{
-					std::ofstream plot2a("results/raw/UWGS_position_noise_(offset).csv", std::ios::app);
-					if (run == 1 && trajPosNoiseStd == 0) {
-						plot2a << "Trajectory-position noise (m),LW-Offset Error (us),UWGS-Offset Error (us)\n";
-					}
-					plot2a << trajPosNoiseStd << "," << LWOffsetError << ",";
-
-					std::ofstream plot2b("results/raw/UWGS_position_noise_(skew).csv", std::ios::app);
-					if (run == 1 && trajPosNoiseStd == 0) {
-						plot2b << "Trajectory-position noise (m),LW-Skew Error (PPM),UWGS-Skew Error (PPM)\n";
-					}
-					plot2b << trajPosNoiseStd << "," << LWSkewError << ",";
+					parameter = trajPosNoiseStd;
 					break;
 				}
 				default:{
 					break;
 				}
 			}
+			std::cout
+			    << "CSV_RESULT,"
+			    << run << ","
+			    << parameter << ","
+			    << "LW-Sync" << ",Offset,"
+			    << LWOffsetError
+			    << std::endl;
+
+			std::cout
+			    << "CSV_RESULT,"
+			    << run << ","
+			    << parameter << ","
+			    << "LW-Sync" << ",Skew,"
+			    << LWSkewError
+			    << std::endl;
 		}
 	};
 
-	Simulator::Schedule (Seconds (runtime), PrintResuLWs);
+	Simulator::Schedule (Seconds (runtime), LWPrintResults);
 
 	Simulator::Stop (Seconds(runtime));
 	Simulator::Run ();

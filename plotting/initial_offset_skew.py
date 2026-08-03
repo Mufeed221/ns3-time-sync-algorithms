@@ -49,7 +49,7 @@ ax1.plot(clock_offset, o_lw_avg, 'bs-', label='LW-Sync', linewidth=2, markersize
 ax1.plot(clock_offset, o_dc_avg, 'go-', label='DC-Sync', linewidth=2, markersize=8)
 ax1.set_xlabel('Initial Offset (s)')
 ax1.set_ylabel('Offset Error (µs)')
-ax1.set_title('Initial Offset')
+ax1.set_title('(a) Initial Offset')
 ax1.legend(loc='best')
 ax1.grid(True, alpha=0.3)
 ax1.set_yscale('log')
@@ -60,14 +60,14 @@ ax2.plot(clock_skew, s_lw_avg, 'bs-', label='LW-Sync', linewidth=2, markersize=8
 ax2.plot(clock_skew, s_dc_avg, 'go-', label='DC-Sync', linewidth=2, markersize=8)
 ax2.set_xlabel('Initial Skew (ppm)')
 ax2.set_ylabel('Offset Error (µs)')
-ax2.set_title('Initial Skew')
+ax2.set_title('(b) Initial Skew')
 ax2.legend(loc='best')
 ax2.grid(True, alpha=0.3)
 ax2.set_yscale('log')
 plt.tight_layout()
 
 # Save figure
-save_path = figures_dir / 'initial offset and skew plot.png'
+save_path = figures_dir / 'initial_offset_and_skew_plot.png'
 plt.savefig(save_path, dpi=300, bbox_inches='tight')
 print(f"Figure saved: {save_path}")
 

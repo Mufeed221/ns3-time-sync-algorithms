@@ -44,7 +44,7 @@ ax1.plot(noise1, o_lw_avg, 'bs-', label='LW-Sync', linewidth=2, markersize=8)
 ax1.plot(noise1, o_uwgs_avg, 'c^-', label='UWGS', linewidth=2, markersize=8)
 ax1.set_xlabel('Trajectory-position noise Std. Dev. (m)')
 ax1.set_ylabel('Offset Error (µs)')
-ax1.set_title('Mean Offset Error')
+ax1.set_title('(a) Mean Offset Error')
 ax1.legend(loc='best')
 ax1.grid(True, alpha=0.3)
 ax1.set_xticks(noise1)
@@ -54,14 +54,14 @@ ax2.plot(noise2, s_lw_avg, 'bs-', label='LW-Sync', linewidth=2, markersize=8)
 ax2.plot(noise2, s_uwgs_avg, 'c^-', label='UWGS', linewidth=2, markersize=8)
 ax2.set_xlabel('Trajectory-position noise Std. Dev. (m)')
 ax2.set_ylabel('Skew Error (ppm)')
-ax2.set_title('Mean Skew Error')
+ax2.set_title('(b) Mean Skew Error')
 ax2.legend(loc='best')
 ax2.grid(True, alpha=0.3)
 ax2.set_xticks(noise2)
 plt.tight_layout()
 
 # Save figure
-save_path = figures_dir / 'UWGS position noise plot.png'
+save_path = figures_dir / 'UWGS_position_noise_plot.png'
 plt.savefig(save_path, dpi=300, bbox_inches='tight')
 print(f"Figure saved: {save_path}")
 

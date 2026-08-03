@@ -25,10 +25,13 @@ double acceleration;
 double DCOffsetError = 0;
 double DCSkewError = 0;
 
-bool track1 = false;
-bool track2 = true;
+bool track1 = true;
+bool track2 = false;
 
 double dataRate;
+
+Ptr<NormalRandomVariable> timestampNoiseVar;
+Ptr<NormalRandomVariable> velocityNoiseVar;
 
 class DCBeacon : public Application
 {
@@ -36,7 +39,7 @@ public:
 	DCBeacon ();
 	virtual ~DCBeacon ();
 
-	void SetParameters (double messageInterval, uint32_t messagePairsCount, double clockSkew, double clockOffset, double timingError, double velocityError);
+	void SetParameters (double messageInterval, uint32_t messagePairsCount, double clockSkew, double clockOffset);
 	void SetSoundSpeed (double speed);
 	void SetCarrierFreq (double freq);
 	void SetPacketSize (uint32_t size);
@@ -81,8 +84,6 @@ private:
 	double m_estimatedOffset;
 	double m_clockSkew;
 	double m_clockOffset;
-	double m_timeError;
-	double m_velocityError;
 	uint32_t m_messageSequence;
 	uint32_t m_messagePairsCount;
 	uint32_t m_pktSize;
@@ -98,8 +99,6 @@ DCBeacon::DCBeacon ()
 	m_estimatedOffset (0),
 	m_clockSkew (0),
 	m_clockOffset (0),
-	m_timeError (20e-6),
-	m_velocityError (0.2),
 	m_messageSequence (0),
 	m_messagePairsCount (20),
 	m_pktSize (60)
@@ -111,14 +110,12 @@ DCBeacon::~DCBeacon ()
 }
 
 void
-DCBeacon::SetParameters (double messageInterval, uint32_t messagePairsCount, double clockSkew, double clockOffset, double timingError, double velocityError)
+DCBeacon::SetParameters (double messageInterval, uint32_t messagePairsCount, double clockSkew, double clockOffset)
 {
 	m_messageInterval = messageInterval;
 	m_messagePairsCount = messagePairsCount;
 	m_clockSkew = clockSkew;
 	m_clockOffset = clockOffset;
-	m_timeError = timingError;
-	m_velocityError = velocityError;
 }
 
 void
@@ -180,7 +177,7 @@ public:
 	DCOrdinary ();
 	virtual ~DCOrdinary ();
 
-	void SetParameters (uint32_t messagePairsCount, double clockSkew, double clockOffset, double timingError, double velocityError);
+	void SetParameters (uint32_t messagePairsCount, double clockSkew, double clockOffset);
 	void SetSoundSpeed (double speed);
 	void SetCarrierFreq (double freq);
 	void SetPacketSize (uint32_t size);
@@ -205,8 +202,6 @@ private:
 	double m_estimatedOffset;
 	double m_clockSkew;
 	double m_clockOffset;
-	double m_timeError;
-	double m_velocityError;
 	double m_T2;
 	double m_T3;
 	double m_V1;
@@ -224,8 +219,6 @@ DCOrdinary::DCOrdinary ()
 	m_estimatedOffset (0),
 	m_clockSkew (0),
 	m_clockOffset (0),
-	m_timeError (20e-6),
-	m_velocityError (0.2),
 	m_T2 (0),
 	m_T3 (0),
 	m_V1 (0),
@@ -240,13 +233,11 @@ DCOrdinary::~DCOrdinary ()
 }
 
 void
-DCOrdinary::SetParameters (uint32_t messagePairsCount, double clockSkew, double clockOffset, double timingError, double velocityError)
+DCOrdinary::SetParameters (uint32_t messagePairsCount, double clockSkew, double clockOffset)
 {
 	m_messagePairsCount = messagePairsCount;
 	m_clockSkew = clockSkew;
 	m_clockOffset = clockOffset;
-	m_timeError = timingError;
-	m_velocityError = velocityError;
 }
 
 void
@@ -367,9 +358,6 @@ DCBeacon::SendRequest()
 bool
 DCOrdinary::ReceiveRequest (Ptr<NetDevice> device, Ptr<const Packet> packet, uint16_t protocol, const Address &sender)
 {
-	Ptr<NormalRandomVariable> timestampNoiseVar = CreateObject<NormalRandomVariable>();
-	timestampNoiseVar->SetAttribute("Mean", DoubleValue(0.0));
-	timestampNoiseVar->SetAttribute("Variance", DoubleValue(m_timeError * m_timeError));
 	double timestampNoise = timestampNoiseVar->GetValue();
 
 	double serialization_time = ((packet->GetSize() + 3) * 8) / dataRate;
@@ -378,9 +366,6 @@ DCOrdinary::ReceiveRequest (Ptr<NetDevice> device, Ptr<const Packet> packet, uin
 	T2 = T2 * (1 + (m_clockSkew * 1e-6)) + m_clockOffset + timestampNoise;
 	m_T2 = T2;
 
-	Ptr<NormalRandomVariable> velocityNoiseVar = CreateObject<NormalRandomVariable>();
-	velocityNoiseVar->SetAttribute("Mean", DoubleValue(0.0));
-	velocityNoiseVar->SetAttribute("Variance", DoubleValue(m_velocityError * m_velocityError));
 	double velocityNoise = velocityNoiseVar->GetValue();
 
 	m_V1 = DCGetVelocity() + velocityNoise;
@@ -435,16 +420,10 @@ DCBeacon::ReceiveReply (Ptr<NetDevice> device, Ptr<const Packet> packet, uint16_
 
 	double T4 = Simulator::Now().GetSeconds() - serialization_time;
 
-	Ptr<NormalRandomVariable> timestampNoiseVar = CreateObject<NormalRandomVariable>();
-	timestampNoiseVar->SetAttribute("Mean", DoubleValue(0.0));
-	timestampNoiseVar->SetAttribute("Variance", DoubleValue(m_timeError * m_timeError));
 	double timestampNoise = timestampNoiseVar->GetValue();
 
 	T4 = T4 + timestampNoise;
 
-	Ptr<NormalRandomVariable> velocityNoiseVar = CreateObject<NormalRandomVariable>();
-	velocityNoiseVar->SetAttribute("Mean", DoubleValue(0.0));
-	velocityNoiseVar->SetAttribute("Variance", DoubleValue(m_velocityError * m_velocityError));
 	double velocityNoise = velocityNoiseVar->GetValue();
 
 	double V2 = DCGetVelocity() + velocityNoise;
@@ -483,8 +462,6 @@ DCBeacon::DCSyncDopplerCompensation(int iteration) {
 
     std::vector<double> all_velocities;
     std::vector<double> all_times;
-
-//    double dopplerNoise = m_velocityError / 1500;
 
     for(uint32_t i = 0; i < m_messagePairsCount; i++) {
         double a_AB, a_BA;
@@ -614,11 +591,11 @@ DCBeacon::Calibration() {
     }
 
     // Final results
-    NS_LOG_DEBUG("\n=== FINAL RESULTS ===");
-    NS_LOG_DEBUG("α = " << m_estimatedSkew <<" (error: " << (m_estimatedSkew - (1+(m_clockSkew*1e-6)))*1e6 << " ppm)");
-    NS_LOG_DEBUG("β = " << m_estimatedOffset<< " s (error: " << std::abs(std::abs(m_estimatedOffset) - m_clockOffset)*1e6 << " us)");
-    DCOffsetError = std::abs(std::abs(m_estimatedOffset) - std::abs(m_clockOffset))*1e6;
-    DCSkewError = std::abs((std::abs(m_estimatedSkew) - std::abs(1+(m_clockSkew*1e-6))))*1e6;
+    NS_LOG_INFO("\n=== FINAL RESULTS ===");
+    NS_LOG_INFO("α = " << m_estimatedSkew <<" (error: " << (m_estimatedSkew - (1+(m_clockSkew*1e-6)))*1e6 << " ppm)");
+    NS_LOG_INFO("β = " << m_estimatedOffset<< " s (error: " << std::abs(std::abs(m_estimatedOffset) - m_clockOffset)*1e6 << " us)");
+    DCOffsetError = std::abs(m_clockOffset - m_estimatedOffset)*1e6;
+    DCSkewError = std::abs((1+(m_clockSkew*1e-6)) - m_estimatedSkew)*1e6;
 }
 
 UanModesList
@@ -662,7 +639,7 @@ main (int argc, char *argv[])
 	double DCMessageInterval = 5; //5 seconds
 	double clockSkew = 200;   //200 ppm
 	double clockOffset = 0.02; //20 ms
-	double timeError = 20e-6; //20us
+	double timeError = 20e-6; //20 us
 	double velocityError = 0.2; //0.2 m/s
 	uint32_t pktSize = 60;  //60 byte
 
@@ -701,6 +678,16 @@ main (int argc, char *argv[])
 	maxVelocity = initVelocity + 3;
 
 	double runtime = (messagePairsCount * DCMessageInterval) + 10;
+
+	timestampNoiseVar = CreateObject<NormalRandomVariable>();
+	timestampNoiseVar -> SetStream(1);
+	timestampNoiseVar -> SetAttribute("Mean", DoubleValue(0.0));
+	timestampNoiseVar -> SetAttribute("Variance", DoubleValue(timeError * timeError));
+
+	velocityNoiseVar = CreateObject<NormalRandomVariable>();
+	velocityNoiseVar -> SetStream(2);
+	velocityNoiseVar -> SetAttribute("Mean", DoubleValue(0.0));
+	velocityNoiseVar -> SetAttribute("Variance", DoubleValue(velocityError * velocityError));
 
 	// Enable detailed UAN logging - use INFO level to see timing information
 	LogComponentEnable ("UanPhyGen", LOG_LEVEL_INFO);
@@ -807,7 +794,7 @@ main (int argc, char *argv[])
 	// Create applications
 	// Beacon application
 	DCBeaconApp = CreateObject<DCBeacon> ();
-	DCBeaconApp->SetParameters (DCMessageInterval, messagePairsCount, clockSkew, clockOffset, timeError, velocityError);
+	DCBeaconApp->SetParameters (DCMessageInterval, messagePairsCount, clockSkew, clockOffset);
 	DCBeaconApp->SetSoundSpeed (soundSpeed);
 	DCBeaconApp->SetCarrierFreq (carrierFreq);
 	DCBeaconApp->SetPacketSize (pktSize);
@@ -817,7 +804,7 @@ main (int argc, char *argv[])
 
 	// Ordinary application
 	DCOrdinaryApp = CreateObject<DCOrdinary> ();
-	DCOrdinaryApp->SetParameters (messagePairsCount, clockSkew, clockOffset, timeError, velocityError);
+	DCOrdinaryApp->SetParameters (messagePairsCount, clockSkew, clockOffset);
 	DCOrdinaryApp->SetSoundSpeed (soundSpeed);
 	DCOrdinaryApp->SetCarrierFreq (carrierFreq);
 	DCOrdinaryApp->SetPacketSize (pktSize);
@@ -825,7 +812,43 @@ main (int argc, char *argv[])
 	DCNodes.Get (1)->AddApplication (DCOrdinaryApp);
 	DCOrdinaryApp->SetStartTime (Seconds (0));
 
-	auto PrintResuDCs = [&]() {
+	auto DCPrintResults = [&]() {
+		double parameter = 0;
+		int angle = 0;
+		switch (angleIndex){
+			case 0:{
+				angle = 0;
+				break;
+			}
+			case 1:{
+				angle = 45;
+				break;
+			}
+			case 2:{
+				angle = 90;
+				break;
+			}
+			case 3:{
+				angle = 135;
+				break;
+			}
+			case 4:{
+				angle = 180;
+				break;
+			}
+			case 5:{
+				angle = 225;
+				break;
+			}
+			case 6:{
+				angle = 270;
+				break;
+			}
+			case 7:{
+				angle = 315;
+				break;
+			}
+		}
 		switch (plotNum) {
 			case 0:{
 				std::cout << "=== DC Results ===" << std::endl;
@@ -833,82 +856,44 @@ main (int argc, char *argv[])
 				std::cout << "DC skew error = " <<DCSkewError<<" ppm"<< std::endl;
 				break;
 			}
-			case 1:{
-				std::ofstream plot("results/raw/distance.csv", std::ios::app);
-				if (track1) {
-				    plot << DCOffsetError << ",";
+			case 1:
+			{
+				if(track2){
+					initDistance = initDistance + radius;
 				}
-				else if (track2) {
-				    plot << DCOffsetError << "\n";
-				}
-			break;
+				parameter = initDistance;
+				break;
 			}
 			case 2:{
-				std::ofstream plot("results/raw/angle.csv", std::ios::app);
-				plot << DCOffsetError << "\n";
-			break;
+				parameter = angle;
+				break;
 			}
 			case 3:{
-				std::ofstream plot("results/raw/velocity.csv", std::ios::app);
-				plot << DCOffsetError << "\n";
-			break;
+				parameter = initVelocity;
+				break;
 			}
 			case 4:{
-				std::ofstream plot("results/raw/acceleration.csv", std::ios::app);
-				plot << DCOffsetError << "\n";
-			break;
+				parameter = acceleration;
+				break;
 			}
 			case 5:{
-				std::ofstream plot("results/raw/velocity_noise.csv", std::ios::app);
-				if (track1) {
-				    plot << DCOffsetError << ",";
-				}
-				else if (track2) {
-				    plot << DCOffsetError << "\n";
-				}
+				parameter = velocityError;
 				break;
 			}
 			case 6:{
-				std::ofstream plot("results/raw/jitter_noise.csv", std::ios::app);
-				if (track1) {
-				    plot << DCOffsetError << ",";
-				}
-				else if (track2) {
-				    plot << DCOffsetError << "\n";
-				}
+				parameter = timeError * 1e6;
 				break;
 			}
 			case 7:{
-				std::ofstream plot("results/raw/initial_offset.csv", std::ios::app);
-				if (track1) {
-				    plot << DCOffsetError << ",";
-				}
-				else if (track2) {
-				    plot << DCOffsetError << "\n";
-				}
+				parameter = clockOffset;
 				break;
 			}
 			case 8:{
-				std::ofstream plot("results/raw/initial_skew.csv", std::ios::app);
-				if (track1) {
-				    plot << DCOffsetError << ",";
-				}
-				else if (track2) {
-				    plot << DCOffsetError << "\n";
-				}
+				parameter = clockSkew;
 				break;
 			}
 			case 9:{
-				std::ofstream plot("results/raw/DC_message_count.csv", std::ios::app);
-				if(track1){
-					if(run == 1 && messagePairsCount == 10){
-						plot << "Track 1,,,Track 2\n";
-						plot << "Two-way Message Pairs,DC-Skew Error (ppm),,DC-Skew Error (ppm)\n";
-					}
-					plot << messagePairsCount << "," << DCSkewError << ",";
-				}else if (track2){
-					plot << "," << DCSkewError << "\n";
-				}
+				parameter = messagePairsCount;
 				break;
 			}
 			case 10:{
@@ -919,9 +904,22 @@ main (int argc, char *argv[])
 				break;
 			}
 		}
+		double error = DCOffsetError;
+		if(plotNum == 9){
+			error = DCSkewError;
+		}
+		const int trackNumber = track1 ? 1 : 2;
+			std::cout
+				<< "CSV_RESULT,"
+				<< run << ","
+				<< parameter << ","
+				<< trackNumber << ","
+				<< "DC-Sync" << ","
+				<< error
+				<< std::endl;
 	};
 
-	Simulator::Schedule (Seconds (runtime), PrintResuDCs);
+	Simulator::Schedule (Seconds (runtime), DCPrintResults);
 
 	Simulator::Stop (Seconds(runtime));
 	Simulator::Run ();
