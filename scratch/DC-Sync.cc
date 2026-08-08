@@ -70,8 +70,6 @@ private:
 	std::vector<double> m_T2List;
 	std::vector<double> m_T3List;
 	std::vector<double> m_T4List;
-	std::vector<double> m_V1List;
-	std::vector<double> m_V2List;
 	std::vector<double> m_a_AB_List;
 	std::vector<double> m_a_BA_List;
 	std::vector<double> m_velocitySamples;
@@ -204,7 +202,7 @@ private:
 	double m_clockOffset;
 	double m_T2;
 	double m_T3;
-	double m_V1;
+	double m_a_AB;
 	uint32_t m_messageSequence;
 	uint32_t m_messagePairsCount;
 	uint32_t m_pktSize;
@@ -221,7 +219,7 @@ DCOrdinary::DCOrdinary ()
 	m_clockOffset (0),
 	m_T2 (0),
 	m_T3 (0),
-	m_V1 (0),
+	m_a_AB (0),
 	m_messageSequence (0),
 	m_messagePairsCount (20),
 	m_pktSize (60)
@@ -368,7 +366,8 @@ DCOrdinary::ReceiveRequest (Ptr<NetDevice> device, Ptr<const Packet> packet, uin
 
 	double velocityNoise = velocityNoiseVar->GetValue();
 
-	m_V1 = DCGetVelocity() + velocityNoise;
+	double v1 = DCGetVelocity() + velocityNoise;
+    m_a_AB = v1 / m_soundSpeed;
 
 	Ptr<Packet> p = packet->Copy();
 
@@ -391,12 +390,12 @@ DCOrdinary::SendReply()
 	struct Reply_Data {
 		double t2;
 		double t3;
-		double v1;
+		double a_AB;
 	} data;
 
 	data.t2 = m_T2;
 	data.t3 = m_T3;
-	data.v1 = m_V1;
+	data.a_AB = m_a_AB;
 
 	Ptr<Packet> packet = Create<Packet> (reinterpret_cast<const uint8_t*> (&data), sizeof(data));
 
@@ -426,14 +425,15 @@ DCBeacon::ReceiveReply (Ptr<NetDevice> device, Ptr<const Packet> packet, uint16_
 
 	double velocityNoise = velocityNoiseVar->GetValue();
 
-	double V2 = DCGetVelocity() + velocityNoise;
+	double v2 = DCGetVelocity() + velocityNoise;
+	double a_BA = v2 / m_soundSpeed;
 
 	Ptr<Packet> p = packet->Copy();
 
 	struct Reply_Data {
 		double t2;
 		double t3;
-		double v1;
+		double a_AB;
 	} data;
 
 	p->CopyData (reinterpret_cast<uint8_t*> (&data), sizeof(data));
@@ -441,8 +441,8 @@ DCBeacon::ReceiveReply (Ptr<NetDevice> device, Ptr<const Packet> packet, uint16_
 	m_T2List.push_back(data.t2);
 	m_T3List.push_back(data.t3);
 	m_T4List.push_back(T4);
-	m_V1List.push_back(data.v1);
-	m_V2List.push_back(V2);
+	m_a_AB_List.push_back(data.a_AB);
+	m_a_BA_List.push_back(a_BA);
 
 	NS_LOG_DEBUG ("DCBeacon received reply at :"<< T4 << " s, Packet size :"<< packet->GetSize()<< " Bytes");
 
@@ -464,20 +464,8 @@ DCBeacon::DCSyncDopplerCompensation(int iteration) {
     std::vector<double> all_times;
 
     for(uint32_t i = 0; i < m_messagePairsCount; i++) {
-        double a_AB, a_BA;
-        if (iteration == 0) {
-            a_AB = (m_V1List[i] / m_soundSpeed);
-
-            a_BA = (m_V2List[i] / m_soundSpeed);
-
-            if (m_a_AB_List.size() <= i) {
-                m_a_AB_List.push_back(a_AB);
-                m_a_BA_List.push_back(a_BA);
-            }
-        } else {
-            a_AB = m_a_AB_List[i];
-            a_BA = m_a_BA_List[i];
-        }
+        double a_AB = m_a_AB_List[i];
+        double a_BA = m_a_BA_List[i];
 
         double v1 = (1.0 - ((1.0 - a_AB) * alpha)) * m_soundSpeed;
         double v2 = (((1.0 + a_BA) * alpha) - 1.0) * m_soundSpeed;
