@@ -278,8 +278,8 @@ def main():
 
     plt.tight_layout(rect=[0, 0, 1, 0.97])
 
-    save_path = FIGURES_DIR / "analytical_bound_comparison_combined.png"
-    plt.savefig(save_path, dpi=300, bbox_inches="tight")
+    save_path = FIGURES_DIR / "analytical_bound_comparison_combined.svg"
+    plt.savefig(save_path, format="svg", bbox_inches="tight")
 
     print(f"Figure saved: {save_path}")
 

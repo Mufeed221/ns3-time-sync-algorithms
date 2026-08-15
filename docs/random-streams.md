@@ -8,7 +8,7 @@ The ns-3 master seed is fixed at:
 RngSeedManager::SetSeed(1);
 ```
 
-For each plotted parameter value, the run number varies from 1 to 500:
+For each plotted parameter value, the run number varies from 1 to 1000:
 
 ```cpp
 RngSeedManager::SetRun(runNumber);
@@ -32,7 +32,6 @@ Therefore, 1000 runs are executed for every plotted data point rather than 1000 
 | Timestamp jitter | Gaussian | mean 0, standard deviation `sigma_t` | Relevant protocols |
 | Velocity-estimation error | Gaussian | mean 0, standard deviation `sigma_v` | Doppler-assisted protocols |
 | Trajectory-position noise | Gaussian | mean 0, standard deviation `sigma_p` | UWGS common-trajectory experiment |
-| Packet loss | UAN PER model or explicit random drop | Document exact implementation | Relevant experiments |
 
 ## Explicit Stream Assignment
 
@@ -45,7 +44,7 @@ positionYRv->SetStream(4);
 
 ## Cross-Protocol Comparability
 
-The same run number is used for protocols evaluated under the same parameter value.
+The same run number is used for protocols evaluated under the same parameter value and mobility model.
 
 ## Typical Batch Structure
 

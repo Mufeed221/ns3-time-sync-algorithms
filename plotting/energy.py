@@ -98,8 +98,8 @@ ax2.grid(True, axis="y", alpha=0.3)
 
 plt.tight_layout()
 
-save_path = figures_dir / "energy_plot.png"
-plt.savefig(save_path, dpi=300, bbox_inches="tight")
+save_path = figures_dir / "energy_plot.svg"
+plt.savefig(save_path, format="svg", bbox_inches="tight")
 
 print(f"Figure saved: {save_path}")
 

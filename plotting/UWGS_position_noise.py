@@ -61,8 +61,8 @@ ax2.set_xticks(noise2)
 plt.tight_layout()
 
 # Save figure
-save_path = figures_dir / 'UWGS_position_noise_plot.png'
-plt.savefig(save_path, dpi=300, bbox_inches='tight')
+save_path = figures_dir / 'UWGS_position_noise_plot.svg'
+plt.savefig(save_path, format="svg", bbox_inches="tight")
 print(f"Figure saved: {save_path}")
 
 plt.show()

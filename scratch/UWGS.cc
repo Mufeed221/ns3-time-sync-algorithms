@@ -521,13 +521,6 @@ main (int argc, char *argv[])
 
 	Ptr<WaypointMobilityModel> UWGSWaypoints = CreateObject<WaypointMobilityModel> ();
 
-
-	std::ofstream plot("csv/LW_vs_UWGS/track.csv", std::ios::app);
-
-	if(plotNum == '0'){
-		plot << "X,Y\n";
-	}
-
 	Ptr<NormalRandomVariable> xposNoiseVar = CreateObject<NormalRandomVariable> ();
 	xposNoiseVar -> SetStream(3);
 	xposNoiseVar->SetAttribute ("Mean", DoubleValue (0.0));
@@ -546,9 +539,6 @@ main (int argc, char *argv[])
 		double xt = 100 + Ax * std::sin (omega * t) + nx;
 		double yt = -initDistance - initVelocity * t + ny;
 		UWGSWaypoints->AddWaypoint (Waypoint (Seconds (t), Vector (xt, yt, -100.0)));
-		if(plotNum == '0'){
-			plot << xt << "," << yt <<"\n";
-		}
 	}
 	UWGSNodes.Get (1)->AggregateObject (UWGSWaypoints);
 

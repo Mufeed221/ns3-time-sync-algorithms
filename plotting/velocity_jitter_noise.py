@@ -88,8 +88,8 @@ ax2.set_xticks(jitter_noise)
 plt.tight_layout()
 
 # Save figure
-save_path = figures_dir / 'velocity_and_jitter_error_plot.png'
-plt.savefig(save_path, dpi=300, bbox_inches='tight')
+save_path = figures_dir / 'velocity_and_jitter_error_plot.svg'
+plt.savefig(save_path, format="svg", bbox_inches="tight")
 print(f"Figure saved: {save_path}")
 
 plt.show()

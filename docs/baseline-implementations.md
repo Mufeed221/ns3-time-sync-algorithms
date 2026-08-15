@@ -1,78 +1,11 @@
 # Baseline Implementation Details
 
-This document records the implementation choices, common simulation settings, message procedures, and equations used for the LT-Sync, DC-Sync, and UWGS baseline protocols.
+This document records the implementation choices, common simulation settings, message procedures, and equations used for the LT-Sync, DC-Sync, and UWGS baseline protocols. 
+See [`simulation-parameters.md`](docs/simulation-parameters.md)
 
 ## 1. General Implementation Policy
 
 All baseline protocols are evaluated using the same underwater acoustic channel, clock configuration, and measurement-noise settings whenever the protocol assumptions permit.
-
-### 1.1 Common Simulation Parameters
-
-| Parameter                          |    Value |
-| ---------------------------------- | -------: |
-| Initial distance                   |    500 m |
-| Sound speed                        | 1500 m/s |
-| Data rate                          |  20 kbps |
-| Packet size                        | 60 bytes |
-| Timestamp-noise standard deviation |    20 µs |
-| Velocity-noise standard deviation  |  0.2 m/s |
-| Clock skew                         |  200 ppm |
-| Clock offset                       |   0.02 s |
-
-### 1.2 Default Track 1 Parameters
-
-Track 1 represents motion along a predominantly linear trajectory.
-
-| Parameter        |     Value |
-| ---------------- | --------: |
-| Initial velocity |     2 m/s |
-| Acceleration     | 0.03 m/s² |
-| Maximum velocity |     5 m/s |
-
-### 1.3 Default Track 2 Parameters
-
-Track 2 represents circular motion.
-
-| Parameter                  |      Value |
-| -------------------------- | ---------: |
-| Radius                     |      100 m |
-| Angular velocity, $\omega$ | 0.02 rad/s |
-| Initial angle              |      0 rad |
-
-### 1.4 ns-3 Underwater Acoustic Configuration
-
-The baseline protocols are adapted to the ns-3 UAN framework using the following configuration.
-
-| Component               | Configuration           |
-| ----------------------- | ----------------------- |
-| Channel model           | UAN                     |
-| Propagation model       | `UanPropModelThorp`     |
-| Noise model             | `UanNoiseModelDefault`  |
-| Wind speed              | 5 m/s                   |
-| Shipping activity       | 0.5                     |
-| MAC protocol            | `UanMacAloha`           |
-| PHY model               | `UanPhyGen`             |
-| Packet-error-rate model | `UanPhyPerGenDefault`   |
-| SINR model              | `UanPhyCalcSinrDefault` |
-| Modulation              | FSK                     |
-| Carrier frequency       | 20 kHz                  |
-| Bandwidth               | 4 kHz                   |
-| Symbol rate             | 2.4 ksym/s              |
-| Transmission power      | 160 dB re 1 µPa         |
-
-### 1.5 Timestamp- and Velocity-Noise Injection
-
-Timestamp noise is injected after packet reception by adding a zero-mean Gaussian random value to the recorded receive timestamp.
-
-Velocity noise is injected after packet reception by adding a zero-mean Gaussian random value to the true radial velocity at the corresponding reception time.
-
-The resulting noisy radial-velocity measurement is
-
-$$
-\tilde{v}_r(t)=v_r(t)+n_v(t)
-$$
-
-where $v_r(t)$ is the true radial velocity and $n_v(t)$ is the generated velocity error.
 
 ---
 

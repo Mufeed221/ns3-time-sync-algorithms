@@ -44,10 +44,20 @@ All evaluated protocols use the same underwater acoustic network configuration u
 | Initial clock offset                | 20 ms   |
 | Initial clock skew                  | 200 ppm |
 | Clock granularity                   | 1 µs    |
-| Timestamp-jitter standard deviation | 20 µs   |
-| Velocity-error standard deviation   | 0.2 m/s |
+| Timestamp-noise standard deviation  | 20 µs   |
+| Velocity-noise standard deviation   | 0.2 m/s |
 
-Timestamp jitter and velocity-estimation error are modeled as zero-mean Gaussian random variables with the standard deviations listed above.
+Timestamp noise is injected after packet reception by adding a zero-mean Gaussian random value to the recorded receive timestamp.
+
+Velocity noise is injected after packet reception by adding a zero-mean Gaussian random value to the true radial velocity at the corresponding reception time.
+
+The resulting noisy radial-velocity measurement is
+
+$$
+\tilde{v}_r(t)=v_r(t)+n_v(t)
+$$
+
+where $v_r(t)$ is the true radial velocity and $n_v(t)$ is the generated velocity error.
 
 ## 4. Mobility Models
 
@@ -131,7 +141,7 @@ where $n_x(t)$ and $n_y(t)$ are independently generated zero-mean Gaussian posit
 
 | Parameter                              | Value                                    |
 | -------------------------------------- | ---------------------------------------- |
-| Default number of one-way skew beacons | 10                                       |
+| Default number of one-way beacons      | 10                                       |
 | Beacon interval                        | 5 s                                      |
 | Initial offset phase                   | Request, reply, and returned data packet |
 | Velocity input                         | PHY-derived radial velocity              |
@@ -205,4 +215,16 @@ One simulation run represents one independent realization of a specific combinat
 One Thousand independent runs are executed for every plotted data point rather than 1000 runs being shared across the complete study.
 
 For each data point, the processed results report the arithmetic mean and population standard deviation over the 1000 runs.
+
+The estimated values and true values in LW-Sync are in oppsite signs, making the error calculated as this
+
+$$e_{\mathrm{skew,ppm}} = \left| \hat{\alpha}+\alpha\right|\times10^6$$
+$$e_{\mathrm{offset,µs}} = \left| \hat{\beta}+\beta\right|\times10^6$$
+
+For the rest of the protocols the error is calculated as this
+
+$$e_{\mathrm{skew,ppm}} = \left| \hat{\alpha}-\alpha\right|\times10^6$$
+$$e_{\mathrm{offset,µs}} = \left| \hat{\beta}-\beta\right|\times10^6$$
+
+where $\alpha$ is the true clock-skew, $\hat{\alpha}$ is its estimate, and $\beta$ is the true clock-offset, $\hat{\beta}$ is its estimate
 

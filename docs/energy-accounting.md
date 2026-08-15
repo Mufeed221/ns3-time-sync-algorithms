@@ -12,14 +12,14 @@ The implementation uses the following ns-3 energy components:
 
 A `BasicEnergySource` is installed on each underwater node. The acoustic modem energy model is then attached to the corresponding UAN network device.
 
-The implementation should preserve the following attachment order:
+The implementation is done in the following order:
 
-1. Create the underwater nodes.
-2. Install the UAN network devices.
-3. Install a `BasicEnergySource` on each node.
-4. Configure the acoustic modem power-state values.
-5. Attach the acoustic modem energy model to each UAN device and its associated energy source.
-6. Read the remaining energy at the beginning and end of the selected measurement window.
+1. Creating the underwater nodes.
+2. Installing the UAN network devices.
+3. Installing a `BasicEnergySource` on each node.
+4. Configuring the acoustic modem power-state values.
+5. Attaching the acoustic modem energy model to each UAN device and its associated energy source.
+6. Reading the remaining energy at the beginning and end of the selected measurement window.
 
 The relevant helper configuration follows the general form:
 
@@ -40,8 +40,6 @@ modemEnergy.Set("RxPowerW", DoubleValue(0.158));
 modemEnergy.Set("IdlePowerW", DoubleValue(0.158));
 modemEnergy.Set("SleepPowerW", DoubleValue(0.0058));
 ```
-
-The exact attribute names should be checked against the version used in ns-3.40 and the corresponding implementation source file.
 
 ## 2. Modem Power States
 
