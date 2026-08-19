@@ -323,7 +323,7 @@ bool
 LTOrdinary::ReceivePacket(Ptr<NetDevice> device, Ptr<const Packet> packet, uint16_t protocol, const Address &sender){
 	double timestampNoise = timestampNoiseVar->GetValue();
 
-	double serialization_time = ((packet->GetSize() + 3) * 8) / 20000.0;
+	double serialization_time = ((packet->GetSize() + 3) * 8) / dataRate;
 	double tReceive = Simulator::Now().GetSeconds() - serialization_time;
 	tReceive = tReceive * (1 + (m_clockSkew * 1e-6)) + m_clockOffset + timestampNoise;
 
