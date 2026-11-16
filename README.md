@@ -2,6 +2,36 @@
 
 This repository contains the ns-3.40 implementations, experiment scripts, raw and processed results, plotting tools, and documentation used to evaluate LW-Sync and the comparison protocols.
 
+## Publication and Citation
+
+This repository provides the implementation and reproducibility materials for:
+
+Mufeed Muthanna Abdulhussein and Ammar E. Abdelkareem,
+“LW-Sync: A Low-complexity Event-driven Offset Correction Scheme for
+Underwater Pairwise Acoustic Communication,”
+International Journal of Intelligent Engineering and Systems,
+vol. 19, no. 10, pp. 1193–1215, 2026.
+
+**Paper:** https://doi.org/10.22266/ijies2026.1031.59
+
+If you use this code or the accompanying results in your research,
+please cite the paper:
+
+```bibtex
+@article{abdulhussein2026lwsync,
+  author  = {Abdulhussein, Mufeed Muthanna and Abdelkareem, Ammar E.},
+  title   = {{LW-Sync}: A Low-complexity Event-driven Offset Correction
+             Scheme for Underwater Pairwise Acoustic Communication},
+  journal = {International Journal of Intelligent Engineering and Systems},
+  volume  = {19},
+  number  = {10},
+  pages   = {1193--1215},
+  year    = {2026},
+  doi     = {10.22266/ijies2026.1031.59},
+  url     = {https://doi.org/10.22266/ijies2026.1031.59}
+}
+```
+
 ## Included Protocols
 
 - **LW-Sync**: proposed low-complexity, event-driven offset-correction method.
